@@ -139,6 +139,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
     url: string;
     iconSrc: string;
     cardBgClass: string;
+    topBarClass: string;
     btnClass: string;
   }[] = [
     {
@@ -147,8 +148,11 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
       subtitle: 'Workflow & tâches terrain',
       url: controller.jtdUrl,
       iconSrc: 'app-icons/jdt-icon.svg',
-      cardBgClass: 'bg-gradient-to-br from-blue-50/75 via-white to-white border-blue-200/80',
-      btnClass: 'bg-blue-700 hover:bg-blue-800',
+      cardBgClass:
+        'bg-gradient-to-br from-blue-50/90 via-white to-white border-blue-200/90 hover:border-blue-300',
+      topBarClass: 'from-blue-600 to-indigo-500',
+      btnClass:
+        'bg-gradient-to-r from-blue-700 to-blue-600 hover:from-blue-800 hover:to-blue-700 shadow-xs shadow-blue-700/20',
     },
     {
       id: 'inasep',
@@ -156,8 +160,11 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
       subtitle: 'Chantiers, EA, intempéries & JC',
       url: controller.inasepUrl,
       iconSrc: 'app-icons/project-controler-icon.png',
-      cardBgClass: 'bg-gradient-to-br from-sky-50/75 via-white to-white border-sky-200/80',
-      btnClass: 'bg-sky-700 hover:bg-sky-800',
+      cardBgClass:
+        'bg-gradient-to-br from-sky-50/95 via-white to-white border-sky-200/90 hover:border-sky-300',
+      topBarClass: 'from-sky-500 to-cyan-500',
+      btnClass:
+        'bg-gradient-to-r from-sky-700 to-cyan-600 hover:from-sky-800 hover:to-cyan-700 shadow-xs shadow-sky-700/20',
     },
     {
       id: 'sitesnap',
@@ -165,8 +172,11 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
       subtitle: 'Photos chantier & dossiers OneDrive',
       url: controller.sitesnapUrl,
       iconSrc: 'app-icons/appli-photo-icon.png',
-      cardBgClass: 'bg-gradient-to-br from-amber-50/70 via-white to-white border-amber-200/80',
-      btnClass: 'bg-amber-600 hover:bg-amber-700',
+      cardBgClass:
+        'bg-gradient-to-br from-amber-50/90 via-white to-white border-amber-200/90 hover:border-amber-300',
+      topBarClass: 'from-amber-500 to-orange-500',
+      btnClass:
+        'bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 shadow-xs shadow-amber-600/20',
     },
   ];
 
@@ -198,52 +208,55 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           {quickApps.map((app) => (
             <div
               key={app.id}
-              className={`border rounded-xl p-5 flex flex-col justify-between gap-5 ${app.cardBgClass}`}
+              className={`border rounded-2xl overflow-hidden shadow-xs hover:shadow-md hover:-translate-y-0.5 transition-all flex flex-col justify-between ${app.cardBgClass}`}
             >
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-xl overflow-hidden border border-slate-200/80 bg-white shrink-0 shadow-xs">
-                  <img
-                    src={app.iconSrc}
-                    alt={`Icône ${app.title}`}
-                    referrerPolicy="no-referrer"
-                    className="w-full h-full object-contain"
-                  />
+              <div className={`h-1.5 w-full bg-gradient-to-r ${app.topBarClass}`} />
+              <div className="p-5 flex flex-col justify-between gap-5 flex-1">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-xl overflow-hidden border border-slate-200/80 bg-white shrink-0 shadow-xs p-1">
+                    <img
+                      src={app.iconSrc}
+                      alt={`Icône ${app.title}`}
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                  <div className="min-w-0 space-y-1">
+                    <h2 className="text-base font-bold text-slate-900 leading-snug">
+                      {app.title}
+                    </h2>
+                    <p className="text-xs text-slate-600">{app.subtitle}</p>
+                  </div>
                 </div>
-                <div className="min-w-0 space-y-1">
-                  <h2 className="text-base font-bold text-slate-900 leading-snug">
-                    {app.title}
-                  </h2>
-                  <p className="text-xs text-slate-600">{app.subtitle}</p>
-                </div>
-              </div>
 
-              <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-slate-200/60">
-                <button
-                  type="button"
-                  onClick={() => onOpenLiveApp(app.id)}
-                  className={`flex-1 inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-lg text-xs font-medium text-white transition-colors whitespace-nowrap ${app.btnClass}`}
-                >
-                  <span>Ouvrir dans B.O.C</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-                <a
-                  href={app.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors whitespace-nowrap"
-                >
-                  <span>Nouvel onglet</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </a>
+                <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-slate-200/70">
+                  <button
+                    type="button"
+                    onClick={() => onOpenLiveApp(app.id)}
+                    className={`flex-1 inline-flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-white transition-all whitespace-nowrap ${app.btnClass}`}
+                  >
+                    <span>Ouvrir dans B.O.C</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                  <a
+                    href={app.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors whitespace-nowrap"
+                  >
+                    <span>Nouvel onglet</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
               </div>
             </div>
           ))}
         </div>
       </section>
 
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="bg-white border border-slate-200 rounded-xl flex flex-col">
-          <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between gap-4 bg-blue-50/40">
+      <section className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div className="bg-white border border-slate-200/90 rounded-2xl shadow-xs overflow-hidden flex flex-col">
+          <div className="px-5 py-4 border-b border-slate-200/80 flex items-center justify-between gap-4 bg-gradient-to-r from-indigo-50/80 via-blue-50/40 to-white">
             <div className="flex items-center gap-2">
               <CheckSquare className="w-4 h-4 text-blue-700" />
               <h2 className="text-sm font-semibold text-slate-900">
@@ -300,8 +313,8 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-xl flex flex-col">
-          <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between gap-4 bg-amber-50/50">
+        <div className="bg-white border border-slate-200/90 rounded-2xl shadow-xs overflow-hidden flex flex-col">
+          <div className="px-5 py-4 border-b border-slate-200/80 flex items-center justify-between gap-4 bg-gradient-to-r from-amber-50/90 via-yellow-50/50 to-white">
             <div className="flex items-center gap-2">
               <NotebookPen className="w-4 h-4 text-amber-700" />
               <h2 className="text-sm font-semibold text-slate-900">
@@ -322,7 +335,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                 key={n.id}
                 type="button"
                 onClick={() => onNavigate('notes')}
-                className="w-full text-left p-3 rounded-lg border border-slate-200/80 hover:border-slate-300 transition-colors space-y-1"
+                className="w-full text-left p-3 rounded-xl border border-black/10 hover:shadow-xs transition-all space-y-1"
                 style={{ backgroundColor: n.color || '#FEF9C3' }}
               >
                 <p className="text-xs font-semibold text-slate-900 truncate">
@@ -341,8 +354,8 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-xl flex flex-col">
-          <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between gap-4 bg-emerald-50/40">
+        <div className="bg-white border border-slate-200/90 rounded-2xl shadow-xs overflow-hidden flex flex-col">
+          <div className="px-5 py-4 border-b border-slate-200/80 flex items-center justify-between gap-4 bg-gradient-to-r from-emerald-50/85 via-teal-50/40 to-white">
             <div className="flex items-center gap-2">
               <Calendar className="w-4 h-4 text-emerald-700" />
               <h2 className="text-sm font-semibold text-slate-900">
@@ -400,8 +413,8 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
         </div>
       </section>
 
-      <section className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-200 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <section className="bg-white border border-slate-200/90 rounded-2xl shadow-xs overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-200/80 bg-gradient-to-r from-slate-50 via-blue-50/35 to-white flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
             <h2 className="text-base font-bold text-slate-900">
               Vos chantiers actifs · Vision globale Project-Controler
@@ -415,7 +428,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
             <button
               type="button"
               onClick={() => syncFileRef.current?.click()}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors whitespace-nowrap"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors whitespace-nowrap"
             >
               <Upload className="w-3.5 h-3.5" />
               <span>Sync Project-Controler (.JSON)</span>
@@ -436,7 +449,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
             <button
               type="button"
               onClick={startNewProject}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-700 text-xs font-medium text-white hover:bg-blue-800 transition-colors whitespace-nowrap"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-700 to-sky-600 text-xs font-semibold text-white hover:from-blue-800 hover:to-sky-700 shadow-xs shadow-blue-700/20 transition-all whitespace-nowrap"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Ajouter chantier</span>

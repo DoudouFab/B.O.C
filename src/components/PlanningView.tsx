@@ -203,7 +203,7 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
           </p>
         </div>
 
-        <div className="inline-flex items-center gap-1 p-1 bg-slate-200/70 rounded-lg w-fit shrink-0 overflow-x-auto max-w-full">
+        <div className="inline-flex items-center gap-1 p-1 bg-white border border-slate-200/90 shadow-xs rounded-xl w-fit shrink-0 overflow-x-auto max-w-full">
           {(
             [
               { id: '60d', label: '60 jours (Jours)' },
@@ -216,10 +216,10 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
               key={opt.id}
               type="button"
               onClick={() => setHorizon(opt.id)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all whitespace-nowrap ${
                 horizon === opt.id
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-gradient-to-r from-blue-700 to-sky-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}
             >
               {opt.label}
@@ -229,21 +229,21 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
       </div>
 
       {/* SECTION HAUT : BARRES GANTT SIMPLES + JOURS CALENDRIER */}
-      <section className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+      <section className="bg-white border border-slate-200/90 rounded-2xl shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <div className={horizon === '60d' ? 'min-w-[1280px]' : 'min-w-[880px]'}>
             {/* En-tête Mois */}
-            <div className="grid grid-cols-12 border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600">
-              <div className="col-span-4 lg:col-span-3 px-4 py-2.5 border-r border-slate-200 flex items-center justify-between">
+            <div className="grid grid-cols-12 border-b border-blue-950/20 bg-gradient-to-r from-[#0B1F4D] to-[#122D6E] text-xs font-semibold text-white">
+              <div className="col-span-4 lg:col-span-3 px-4 py-2.5 border-r border-white/15 flex items-center justify-between">
                 <span>Chantier</span>
-                <span className="text-[11px] font-medium text-slate-500">
+                <span className="text-[11px] font-medium text-sky-200/90">
                   Jours cal.
                 </span>
               </div>
 
               {horizon === '60d' ? (
                 <div
-                  className="col-span-8 lg:col-span-9 grid divide-x divide-slate-200"
+                  className="col-span-8 lg:col-span-9 grid divide-x divide-white/15"
                   style={{
                     gridTemplateColumns: 'repeat(60, minmax(0, 1fr))',
                   }}
@@ -252,7 +252,7 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
                     <div
                       key={m.key}
                       style={{ gridColumn: `span ${m.span} / span ${m.span}` }}
-                      className="py-2 px-2 text-left font-mono text-[11px] text-slate-700 truncate"
+                      className="py-2.5 px-2 text-left font-mono text-[11px] text-sky-100 truncate"
                     >
                       {m.label}
                     </div>
@@ -260,7 +260,7 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
                 </div>
               ) : (
                 <div
-                  className="col-span-8 lg:col-span-9 grid divide-x divide-slate-200"
+                  className="col-span-8 lg:col-span-9 grid divide-x divide-white/15"
                   style={{
                     gridTemplateColumns: `repeat(${months.length}, minmax(0, 1fr))`,
                   }}
@@ -268,7 +268,7 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
                   {months.map((m) => (
                     <div
                       key={m.key}
-                      className="py-2 text-center font-mono text-[11px] text-slate-700"
+                      className="py-2.5 text-center font-mono text-[11px] text-sky-100"
                     >
                       {m.label}
                     </div>
@@ -461,9 +461,9 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
       {/* SECTION BAS : RENTRÉE DE PARAMÈTRES */}
       <section
         ref={paramsSectionRef}
-        className="bg-white border border-slate-200 rounded-xl overflow-hidden"
+        className="bg-white border border-slate-200/90 rounded-2xl shadow-xs overflow-hidden"
       >
-        <div className="px-5 py-4 border-b border-slate-200 bg-slate-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="px-5 py-4 border-b border-slate-200/80 bg-gradient-to-r from-sky-50/70 via-blue-50/30 to-white flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <SlidersHorizontal className="w-4 h-4 text-blue-700" />
             <div>

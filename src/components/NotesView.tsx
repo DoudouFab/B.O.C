@@ -154,14 +154,14 @@ export const NotesView: React.FC<NotesViewProps> = ({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Filtrer les post-it..."
-              className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+              className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 shadow-2xs focus:outline-none focus:ring-2 focus:ring-blue-600"
             />
           </div>
 
           <button
             type="button"
             onClick={handleNewPostIt}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-700 text-sm font-medium text-white hover:bg-blue-800 transition-colors whitespace-nowrap shrink-0"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-sm font-semibold text-white hover:from-amber-600 hover:to-orange-600 shadow-sm shadow-amber-500/25 transition-all whitespace-nowrap shrink-0"
           >
             <Plus className="w-4 h-4" />
             <span>Nouveau post-it</span>
@@ -186,7 +186,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
                     setModalNoteId(note.id);
                   }
                 }}
-                className="group relative rounded-xl p-5 min-h-[210px] flex flex-col justify-between gap-4 border shadow-xs hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                className="group relative rounded-2xl p-5 min-h-[210px] flex flex-col justify-between gap-4 border shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
                 style={{
                   backgroundColor: palette.hex,
                   borderColor: palette.borderHex,

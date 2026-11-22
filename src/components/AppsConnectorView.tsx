@@ -109,7 +109,7 @@ export const AppsConnectorView: React.FC<AppsConnectorViewProps> = ({
         </p>
       </div>
 
-      <section className="bg-white border border-slate-200 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <section className="bg-gradient-to-r from-emerald-50/80 via-white to-white border border-emerald-200/80 rounded-2xl shadow-xs p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-start gap-3">
           <ShieldCheck className="w-5 h-5 text-emerald-700 shrink-0 mt-0.5" />
           <div className="space-y-0.5">
@@ -124,14 +124,14 @@ export const AppsConnectorView: React.FC<AppsConnectorViewProps> = ({
             </p>
           </div>
         </div>
-        <div className="text-xs font-medium text-emerald-700 whitespace-nowrap shrink-0">
+        <div className="text-xs font-semibold text-emerald-700 whitespace-nowrap shrink-0">
           Compte vérifié et isolé
         </div>
       </section>
 
       {controller.linksLocked ? (
         <section className="space-y-4">
-          <div className="bg-white border border-slate-200 rounded-xl p-5 flex items-start gap-3">
+          <div className="bg-white border border-slate-200/90 rounded-2xl shadow-xs p-5 flex items-start gap-3">
             <Lock className="w-5 h-5 text-blue-700 shrink-0 mt-0.5" />
             <div className="space-y-1">
               <h2 className="text-sm font-semibold text-slate-900">
@@ -149,7 +149,7 @@ export const AppsConnectorView: React.FC<AppsConnectorViewProps> = ({
               return (
                 <div
                   key={app.id}
-                  className="bg-white border border-slate-200 rounded-xl p-5 flex flex-col justify-between gap-4"
+                  className="bg-white border border-slate-200/90 rounded-2xl shadow-xs p-5 flex flex-col justify-between gap-4 hover:shadow-md transition-shadow"
                 >
                   <div className="space-y-2">
                     <div className="flex items-center gap-3">
@@ -175,7 +175,7 @@ export const AppsConnectorView: React.FC<AppsConnectorViewProps> = ({
                         href={app.value}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-700 text-xs font-medium text-white hover:bg-blue-800 transition-colors whitespace-nowrap"
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-700 to-sky-600 text-xs font-semibold text-white hover:from-blue-800 hover:to-sky-700 transition-all whitespace-nowrap"
                       >
                         <ExternalLink className="w-3.5 h-3.5" />
                         <span>Ouvrir</span>

@@ -343,7 +343,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors whitespace-nowrap"
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:bg-slate-50 shadow-2xs transition-colors whitespace-nowrap"
           >
             <Upload className="w-3.5 h-3.5" />
             <span>Sync Project-Controler (.JSON)</span>
@@ -360,7 +360,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             href={projectControlerUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-blue-700 text-xs font-medium text-white hover:bg-blue-800 transition-colors whitespace-nowrap"
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-700 to-sky-600 text-xs font-semibold text-white hover:from-blue-800 hover:to-sky-700 shadow-xs shadow-blue-700/20 transition-all whitespace-nowrap"
           >
             <span>Encoder intempérie / JC dans Project-Controler</span>
             <ExternalLink className="w-3.5 h-3.5" />
@@ -368,7 +368,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         </div>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-xl p-3.5 flex flex-wrap items-center gap-3">
+      <div className="bg-white border border-slate-200/90 rounded-2xl shadow-xs p-3.5 flex flex-wrap items-center gap-3">
         <span className="text-xs font-medium text-slate-500">
           Couleurs par chantier :
         </span>
@@ -416,21 +416,21 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         ))}
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4 bg-slate-50/60">
+      <div className="bg-white border border-slate-200/90 rounded-2xl shadow-xs overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-4 bg-gradient-to-r from-emerald-50/60 via-slate-50/70 to-white">
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => handleNavigate(-1)}
               aria-label="Période précédente"
-              className="p-2 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+              className="p-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
             <button
               type="button"
               onClick={() => setAnchorDate(todayStr)}
-              className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:bg-slate-50 whitespace-nowrap"
+              className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 whitespace-nowrap transition-colors"
             >
               Aujourd’hui
             </button>
@@ -438,7 +438,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               type="button"
               onClick={() => handleNavigate(1)}
               aria-label="Période suivante"
-              className="p-2 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+              className="p-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
             >
               <ChevronRight className="w-4 h-4" />
             </button>
@@ -447,7 +447,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             </h2>
           </div>
 
-          <div className="inline-flex items-center gap-1 p-1 bg-slate-200/70 rounded-lg">
+          <div className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-xl">
             {(
               [
                 { id: 'month', label: 'Mois' },
@@ -460,9 +460,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                 key={m.id}
                 type="button"
                 onClick={() => setViewMode(m.id)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
+                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all whitespace-nowrap ${
                   viewMode === m.id
-                    ? 'bg-white text-slate-900 shadow-xs'
+                    ? 'bg-gradient-to-r from-blue-700 to-sky-600 text-white shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >

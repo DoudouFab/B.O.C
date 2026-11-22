@@ -134,7 +134,7 @@ export const TodoView: React.FC<TodoViewProps> = ({
   return (
     <div className="space-y-4">
       {/* Barre d'action sticky : le bouton Ajouter tâche reste toujours visible */}
-      <div className="sticky top-16 z-20 bg-slate-50/95 backdrop-blur py-3 border-b border-slate-200/80 flex items-center justify-between gap-3">
+      <div className="sticky top-16 z-20 bg-[#f1f5fb]/95 backdrop-blur-md py-3 border-b border-slate-200/80 flex items-center justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-xl font-bold text-slate-900 truncate">
             To-Do Liste
@@ -147,7 +147,7 @@ export const TodoView: React.FC<TodoViewProps> = ({
         <button
           type="button"
           onClick={openCreateModal}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-blue-700 text-xs sm:text-sm font-medium text-white hover:bg-blue-800 shadow-xs transition-colors whitespace-nowrap shrink-0"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-700 to-sky-600 text-xs sm:text-sm font-semibold text-white hover:from-blue-800 hover:to-sky-700 shadow-sm shadow-blue-700/20 transition-all whitespace-nowrap shrink-0"
         >
           <Plus className="w-4 h-4" />
           <span>Ajouter tâche</span>
@@ -155,17 +155,17 @@ export const TodoView: React.FC<TodoViewProps> = ({
       </div>
 
       {/* Liste pure des tâches */}
-      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-        <div className="p-3.5 sm:px-4 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-lg w-fit">
+      <div className="bg-white border border-slate-200/90 rounded-2xl shadow-xs overflow-hidden">
+        <div className="p-3.5 sm:px-4 border-b border-slate-200/80 bg-gradient-to-r from-indigo-50/50 via-white to-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-xl w-fit">
             {(['Toutes', 'À faire', 'Terminées'] as const).map((tab) => (
               <button
                 key={tab}
                 type="button"
                 onClick={() => setFilter(tab)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
+                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all whitespace-nowrap ${
                   filter === tab
-                    ? 'bg-white text-slate-900 shadow-xs'
+                    ? 'bg-white text-blue-700 shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >

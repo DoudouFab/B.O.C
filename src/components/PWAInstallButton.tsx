@@ -33,8 +33,8 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
       <button
         type="button"
         onClick={handleClick}
-        className={`inline-flex items-center justify-center gap-1.5 rounded-lg bg-blue-700 text-xs font-medium text-white hover:bg-blue-800 transition-colors whitespace-nowrap shrink-0 ${
-          compact ? 'px-2.5 py-2' : 'px-3.5 py-2'
+        className={`inline-flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-blue-700 to-sky-600 text-xs font-semibold text-white hover:from-blue-800 hover:to-sky-700 shadow-xs shadow-blue-700/20 transition-all whitespace-nowrap shrink-0 ${
+          compact ? 'px-3 py-2' : 'px-4 py-2.5'
         }`}
         title="Installer B.O.C sur votre téléphone ou PC"
       >

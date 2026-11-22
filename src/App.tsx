@@ -432,8 +432,16 @@ export default function App() {
 
   if (!authReady || (user && (loadingProfile || !controller))) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-        <div className="text-sm font-medium text-slate-600">
+      <div className="min-h-screen bg-gradient-to-br from-[#071430] via-[#0B1F4D] to-[#08173A] flex flex-col items-center justify-center gap-4 p-6">
+        <div className="w-16 h-16 rounded-2xl overflow-hidden ring-2 ring-cyan-400/45 shadow-xl">
+          <img
+            src="src/assets/images/boc_logo_emblem_flashy.png"
+            alt="Logo B.O.C"
+            referrerPolicy="no-referrer"
+            className="w-full h-full object-cover"
+          />
+        </div>
+        <div className="text-sm font-medium text-sky-100">
           Chargement de B.O.C...
         </div>
       </div>
@@ -1198,7 +1206,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen flex bg-slate-50 text-slate-900">
+    <div className="min-h-screen flex bg-[#f1f5fb] text-slate-900">
       <Sidebar
         activeTab={activeTab}
         onSelectTab={(tab) => {
@@ -1216,24 +1224,31 @@ export default function App() {
       />
 
       <div className="flex-1 min-w-0 flex flex-col">
-        <header className="h-16 bg-white border-b border-slate-200 px-3 sm:px-6 lg:px-8 flex items-center justify-between gap-2 sm:gap-6 sticky top-0 z-30">
+        <header className="h-16 bg-white/90 backdrop-blur-md border-b border-slate-200/90 px-3 sm:px-6 lg:px-8 flex items-center justify-between gap-2 sm:gap-6 sticky top-0 z-30">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <button
               type="button"
               onClick={() => setMobileMenuOpen(true)}
               aria-label="Ouvrir la navigation"
-              className="lg:hidden p-2 -ml-1 rounded-lg text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+              className="lg:hidden p-2 -ml-1 rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
             >
               <Menu className="w-5 h-5" />
             </button>
-            <div className="flex items-center gap-1.5 sm:gap-2 text-sm min-w-0 truncate">
-              <span className="text-slate-500 whitespace-nowrap">
+            <div className="flex items-center gap-2 text-sm min-w-0 truncate">
+              {activeProject && (
+                <span
+                  className="w-2.5 h-2.5 rounded-sm shrink-0"
+                  style={{ backgroundColor: activeProject.color }}
+                  aria-hidden="true"
+                />
+              )}
+              <span className="font-medium text-slate-500 whitespace-nowrap">
                 {activeProject ? activeProject.code : 'B.O.C'}
               </span>
               <span aria-hidden="true" className="text-slate-300">
                 /
               </span>
-              <span className="font-medium text-slate-900 truncate">
+              <span className="font-semibold text-slate-900 truncate">
                 {liveAppId
                   ? getLiveAppInfo(liveAppId).title
                   : TAB_LABELS[activeTab]}
@@ -1243,7 +1258,7 @@ export default function App() {
 
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {notice && (
-              <span className="hidden md:inline text-xs font-medium text-emerald-700 whitespace-nowrap">
+              <span className="hidden md:inline text-xs font-semibold text-emerald-700 whitespace-nowrap">
                 {notice}
               </span>
             )}
@@ -1256,7 +1271,7 @@ export default function App() {
                   activeTab === 'connector' ? 'overview' : 'connector'
                 );
               }}
-              className="px-2.5 sm:px-3.5 py-2 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-800 hover:bg-slate-50 transition-colors whitespace-nowrap shrink-0"
+              className="px-3 sm:px-3.5 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 hover:text-slate-900 transition-colors whitespace-nowrap shrink-0"
             >
               <span className="hidden sm:inline">
                 {activeTab === 'connector' ? 'Retour Accueil' : 'Liens & Compte'}
@@ -1268,7 +1283,7 @@ export default function App() {
           </div>
         </header>
 
-        <main className="flex-1 px-3.5 sm:px-6 lg:px-8 pt-4 sm:py-6 pb-24 lg:pb-8 max-w-[1440px] w-full mx-auto">
+        <main className="flex-1 px-3.5 sm:px-6 lg:px-8 pt-5 sm:py-6 pb-24 lg:pb-8 max-w-[1440px] w-full mx-auto">
           {liveAppId ? (
             <LiveAppEmbedView
               appId={liveAppId}
@@ -1364,7 +1379,7 @@ export default function App() {
 
         <nav
           aria-label="Navigation mobile"
-          className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur border-t border-slate-200 px-1 pt-1.5 pb-[max(0.45rem,env(safe-area-inset-bottom))] grid grid-cols-5 gap-0.5"
+          className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200/90 px-1.5 pt-1.5 pb-[max(0.45rem,env(safe-area-inset-bottom))] grid grid-cols-5 gap-1 shadow-[0_-4px_16px_rgba(15,23,42,0.06)]"
         >
           {(
             [
@@ -1385,9 +1400,9 @@ export default function App() {
                   setLiveAppId(null);
                   setActiveTab(item.id);
                 }}
-                className={`flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-lg text-[11px] font-medium transition-colors ${
+                className={`flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-xl text-[11px] font-semibold transition-all ${
                   isActive
-                    ? 'text-blue-700 bg-blue-50/70'
+                    ? 'text-blue-700 bg-blue-50/90 shadow-2xs'
                     : 'text-slate-500 hover:text-slate-900'
                 }`}
               >
