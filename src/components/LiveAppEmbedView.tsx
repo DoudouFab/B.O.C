@@ -25,16 +25,16 @@ export const LiveAppEmbedView: React.FC<LiveAppEmbedViewProps> = ({
     label: string;
     iconSrc: string;
   }[] = [
-    { id: 'jtd', label: 'JDT', iconSrc: '/app-icons/jdt-icon.svg' },
+    { id: 'jtd', label: 'JDT', iconSrc: 'app-icons/jdt-icon.svg' },
     {
       id: 'inasep',
       label: 'Project-Controler',
-      iconSrc: '/app-icons/project-controler-icon.png',
+      iconSrc: 'app-icons/project-controler-icon.png',
     },
     {
       id: 'sitesnap',
       label: 'Appli-Photo',
-      iconSrc: '/app-icons/appli-photo-icon.png',
+      iconSrc: 'app-icons/appli-photo-icon.png',
     },
   ];
 

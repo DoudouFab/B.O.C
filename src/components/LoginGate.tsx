@@ -28,7 +28,7 @@ export const LoginGate: React.FC = () => {
       <div className="max-w-md w-full mx-auto bg-white border border-slate-200 rounded-xl p-8 space-y-6">
         <div className="flex items-center gap-4">
           <img
-            src="/src/assets/images/boc_logo_emblem_1795171020204.jpg"
+            src="src/assets/images/boc_logo_emblem_1795171020204.jpg"
             alt="Logo B.O.C"
             referrerPolicy="no-referrer"
             className="w-14 h-14 rounded-lg border border-slate-200 object-cover shrink-0"

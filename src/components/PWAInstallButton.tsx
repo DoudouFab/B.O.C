@@ -60,7 +60,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
             <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
               <div className="flex items-center gap-2.5">
                 <img
-                  src="/pwa-192x192.png"
+                  src="pwa-192x192.png"
                   alt="Icône B.O.C"
                   referrerPolicy="no-referrer"
                   className="w-8 h-8 rounded-lg border border-slate-200"

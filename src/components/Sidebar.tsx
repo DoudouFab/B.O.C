@@ -55,7 +55,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="flex items-center justify-between px-4 h-16 border-b border-slate-200">
         <div className="flex items-center gap-2.5 min-w-0">
           <img
-            src="/src/assets/images/boc_logo_emblem_1795171020204.jpg"
+            src="src/assets/images/boc_logo_emblem_1795171020204.jpg"
             alt="Logo B.O.C"
             referrerPolicy="no-referrer"
             className="w-8 h-8 rounded-md border border-slate-200 object-cover shrink-0"
