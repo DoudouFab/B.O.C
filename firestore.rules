@@ -44,6 +44,10 @@ service cloud.firestore {
       return val is string && val.size() == 7 && val.matches('^#[0-9a-fA-F]{6}$');
     }
 
+    function isValidDateStr(val) {
+      return val is string && val.size() == 10 && val.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+    }
+
     function controllerDocExists(controllerId) {
       return exists(/databases/$(database)/documents/controllers/$(controllerId));
     }
@@ -84,6 +88,7 @@ service cloud.firestore {
         && data.keys().hasOnly([
           'ownerUid', 'code', 'name', 'commune', 'color',
           'marcheTotalReviseEur', 'cumulEaValidesEur', 'eaEnCoursEur', 'eaEnCoursCoche', 'delaiRestantJours',
+          'startDate', 'estimatedEndDate',
           'createdAt', 'updatedAt'
         ])
         && data.ownerUid is string && data.ownerUid == controllerId && data.ownerUid == request.auth.uid
@@ -96,6 +101,8 @@ service cloud.firestore {
         && data.eaEnCoursEur is number && data.eaEnCoursEur >= 0
         && data.eaEnCoursCoche is bool
         && data.delaiRestantJours is number && data.delaiRestantJours >= 0
+        && (!('startDate' in data) || isValidDateStr(data.startDate))
+        && (!('estimatedEndDate' in data) || isValidDateStr(data.estimatedEndDate))
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
     }
@@ -105,11 +112,12 @@ service cloud.firestore {
           'ownerUid', 'projectId', 'title', 'priority', 'done', 'dueDate', 'createdAt', 'updatedAt'
         ])
         && data.keys().hasOnly([
-          'ownerUid', 'projectId', 'title', 'priority', 'done', 'dueDate', 'createdAt', 'updatedAt'
+          'ownerUid', 'projectId', 'title', 'details', 'priority', 'done', 'dueDate', 'createdAt', 'updatedAt'
         ])
         && data.ownerUid is string && data.ownerUid == controllerId && data.ownerUid == request.auth.uid
         && isValidId(data.projectId)
         && data.title is string && data.title.size() >= 1 && data.title.size() <= 240
+        && (!('details' in data) || (data.details is string && data.details.size() <= 1000))
         && data.priority in ['Haute', 'Normale', 'Basse']
         && data.done is bool
         && data.dueDate is string && data.dueDate.size() <= 20
@@ -122,13 +130,18 @@ service cloud.firestore {
           'ownerUid', 'projectId', 'date', 'title', 'details', 'entryType', 'source', 'createdAt', 'updatedAt'
         ])
         && data.keys().hasOnly([
-          'ownerUid', 'projectId', 'date', 'title', 'details', 'entryType', 'source', 'createdAt', 'updatedAt'
+          'ownerUid', 'projectId', 'date', 'title', 'details',
+          'startTime', 'durationMinutes', 'location',
+          'entryType', 'source', 'createdAt', 'updatedAt'
         ])
         && data.ownerUid is string && data.ownerUid == controllerId && data.ownerUid == request.auth.uid
         && isValidId(data.projectId)
-        && data.date is string && data.date.size() == 10 && data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && isValidDateStr(data.date)
         && data.title is string && data.title.size() >= 1 && data.title.size() <= 200
         && data.details is string && data.details.size() <= 600
+        && (!('startTime' in data) || (data.startTime is string && data.startTime.size() <= 5))
+        && (!('durationMinutes' in data) || (data.durationMinutes is number && data.durationMinutes >= 0 && data.durationMinutes <= 1440))
+        && (!('location' in data) || (data.location is string && data.location.size() <= 160))
         && data.entryType in ['Annotation', 'Intempérie', 'JC']
         && data.source in ['boc', 'project-controler']
         && data.createdAt is timestamp
@@ -140,12 +153,13 @@ service cloud.firestore {
           'ownerUid', 'projectId', 'title', 'content', 'pinned', 'createdAt', 'updatedAt'
         ])
         && data.keys().hasOnly([
-          'ownerUid', 'projectId', 'title', 'content', 'pinned', 'createdAt', 'updatedAt'
+          'ownerUid', 'projectId', 'title', 'content', 'color', 'pinned', 'createdAt', 'updatedAt'
         ])
         && data.ownerUid is string && data.ownerUid == controllerId && data.ownerUid == request.auth.uid
         && isValidId(data.projectId)
         && data.title is string && data.title.size() >= 1 && data.title.size() <= 180
         && data.content is string && data.content.size() <= 25000
+        && (!('color' in data) || isValidHexColor(data.color))
         && data.pinned is bool
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
@@ -174,6 +188,12 @@ service cloud.firestore {
           (existing().linksLocked == true
             && incoming().linksLocked == true
             && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'updatedAt']))
+          ||
+          (existing().linksLocked == true
+            && incoming().linksLocked == true
+            && existing().inasepUrl == 'https://doudoufab.github.io/Project-Controler-Fabien.PIRQUIN/'
+            && incoming().inasepUrl == 'https://doudoufab.github.io/Project-Controler-V2/'
+            && incoming().diff(existing()).affectedKeys().hasOnly(['inasepUrl', 'updatedAt']))
         );
 
       allow delete: if false;
@@ -198,6 +218,7 @@ service cloud.firestore {
           && incoming().diff(existing()).affectedKeys().hasOnly([
             'code', 'name', 'commune', 'color',
             'marcheTotalReviseEur', 'cumulEaValidesEur', 'eaEnCoursEur', 'eaEnCoursCoche', 'delaiRestantJours',
+            'startDate', 'estimatedEndDate',
             'updatedAt'
           ]);
 
@@ -224,7 +245,7 @@ service cloud.firestore {
           && incoming().updatedAt == request.time
           && (
             incoming().diff(existing()).affectedKeys().hasOnly(['done', 'updatedAt']) ||
-            incoming().diff(existing()).affectedKeys().hasOnly(['projectId', 'title', 'priority', 'done', 'dueDate', 'updatedAt'])
+            incoming().diff(existing()).affectedKeys().hasOnly(['projectId', 'title', 'details', 'priority', 'done', 'dueDate', 'updatedAt'])
           );
 
         allow delete: if isControllerOwner(controllerId) && isValidId(todoId);
@@ -248,7 +269,11 @@ service cloud.firestore {
           && incoming().ownerUid == existing().ownerUid
           && incoming().createdAt == existing().createdAt
           && incoming().updatedAt == request.time
-          && incoming().diff(existing()).affectedKeys().hasOnly(['projectId', 'date', 'title', 'details', 'updatedAt']);
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'projectId', 'date', 'title', 'details',
+            'startTime', 'durationMinutes', 'location',
+            'updatedAt'
+          ]);
 
         allow delete: if isControllerOwner(controllerId) && isValidId(entryId);
       }
@@ -271,7 +296,9 @@ service cloud.firestore {
           && incoming().ownerUid == existing().ownerUid
           && incoming().createdAt == existing().createdAt
           && incoming().updatedAt == request.time
-          && incoming().diff(existing()).affectedKeys().hasOnly(['projectId', 'title', 'content', 'pinned', 'updatedAt']);
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'projectId', 'title', 'content', 'color', 'pinned', 'updatedAt'
+          ]);
 
         allow delete: if isControllerOwner(controllerId) && isValidId(noteId);
       }

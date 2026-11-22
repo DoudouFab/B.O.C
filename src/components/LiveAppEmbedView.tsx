@@ -5,6 +5,7 @@ interface LiveAppEmbedViewProps {
   appId: 'jtd' | 'inasep' | 'sitesnap';
   title: string;
   url: string;
+  iframeRef?: React.RefObject<HTMLIFrameElement | null>;
   onBackHome: () => void;
   onSwitchApp: (appId: 'jtd' | 'inasep' | 'sitesnap') => void;
 }
@@ -13,19 +14,32 @@ export const LiveAppEmbedView: React.FC<LiveAppEmbedViewProps> = ({
   appId,
   title,
   url,
+  iframeRef,
   onBackHome,
   onSwitchApp,
 }) => {
   const [loaded, setLoaded] = useState(false);
 
-  const tabs: { id: 'jtd' | 'inasep' | 'sitesnap'; label: string }[] = [
-    { id: 'jtd', label: 'JTD' },
-    { id: 'inasep', label: 'Project-Controler' },
-    { id: 'sitesnap', label: 'Appli-Photo' },
+  const tabs: {
+    id: 'jtd' | 'inasep' | 'sitesnap';
+    label: string;
+    iconSrc: string;
+  }[] = [
+    { id: 'jtd', label: 'JDT', iconSrc: '/app-icons/jdt-icon.svg' },
+    {
+      id: 'inasep',
+      label: 'Project-Controler',
+      iconSrc: '/app-icons/project-controler-icon.png',
+    },
+    {
+      id: 'sitesnap',
+      label: 'Appli-Photo',
+      iconSrc: '/app-icons/appli-photo-icon.png',
+    },
   ];
 
   return (
-    <div className="flex flex-col h-[calc(100vh-7.5rem)] bg-white border border-slate-200 rounded-xl overflow-hidden">
+    <div className="flex flex-col h-[calc(100dvh-11.25rem)] lg:h-[calc(100vh-7.5rem)] bg-white border border-slate-200 rounded-xl overflow-hidden">
       <div className="px-4 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 bg-slate-50">
         <div className="flex items-center gap-3 min-w-0">
           <button
@@ -46,13 +60,19 @@ export const LiveAppEmbedView: React.FC<LiveAppEmbedViewProps> = ({
                   setLoaded(false);
                   onSwitchApp(t.id);
                 }}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 ${
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 ${
                   appId === t.id
                     ? 'bg-white text-slate-900 shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                {t.label}
+                <img
+                  src={t.iconSrc}
+                  alt=""
+                  referrerPolicy="no-referrer"
+                  className="w-4 h-4 rounded-sm object-contain shrink-0"
+                />
+                <span>{t.label}</span>
               </button>
             ))}
           </div>
@@ -76,6 +96,7 @@ export const LiveAppEmbedView: React.FC<LiveAppEmbedViewProps> = ({
           </div>
         )}
         <iframe
+          ref={iframeRef}
           key={url}
           src={url}
           title={title}

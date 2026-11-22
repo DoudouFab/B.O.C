@@ -1,5 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import { Menu } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  Calendar,
+  CheckSquare,
+  GanttChartSquare,
+  LayoutGrid,
+  Menu,
+  NotebookPen,
+} from 'lucide-react';
 import { onAuthStateChanged, signOut, User } from 'firebase/auth';
 import {
   collection,
@@ -25,6 +32,7 @@ import {
   INITIAL_NOTEBOOKS,
   INITIAL_PROJECTS,
   INITIAL_TODOS,
+  POSTIT_COLOR_PALETTE,
   PROJECT_COLOR_PALETTE,
 } from './data/initialData';
 import {
@@ -38,24 +46,45 @@ import {
 import { LoginGate } from './components/LoginGate';
 import { Sidebar } from './components/Sidebar';
 import { OverviewView } from './components/OverviewView';
+import { PlanningView } from './components/PlanningView';
 import { TodoView } from './components/TodoView';
 import { CalendarView } from './components/CalendarView';
 import { NotesView } from './components/NotesView';
 import { AppsConnectorView } from './components/AppsConnectorView';
 import { LiveAppEmbedView } from './components/LiveAppEmbedView';
+import { PWAInstallButton } from './components/PWAInstallButton';
+import { OfflineIndicator } from './components/OfflineIndicator';
+
+const LEGACY_BROKEN_PROJECT_CONTROLER_URL =
+  'https://doudoufab.github.io/Project-Controler-Fabien.PIRQUIN/';
 
 const PERMANENT_URLS = {
   jtd: 'https://doudoufab.github.io/JTD/',
-  inasep: 'https://doudoufab.github.io/Project-Controler-Fabien.PIRQUIN/',
+  inasep: 'https://doudoufab.github.io/Project-Controler-V2/',
   sitesnap: 'https://doudoufab.github.io/Appli-Photo/',
 };
 
 const TAB_LABELS: Record<ModuleTab, string> = {
   overview: 'Accueil · 3 Applis',
+  planning: 'Planning (Gantt)',
   todo: 'To-Do Liste',
   calendar: 'Calendrier',
   notes: 'Prise de notes',
   connector: 'Liens & Compte',
+};
+
+const safeDateStr = (val: unknown, fallback: string): string => {
+  if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val)) {
+    return val;
+  }
+  return fallback;
+};
+
+const safeHexColor = (val: unknown, fallback: string): string => {
+  if (typeof val === 'string' && /^#[0-9a-fA-F]{6}$/.test(val)) {
+    return val;
+  }
+  return fallback;
 };
 
 export default function App() {
@@ -76,6 +105,8 @@ export default function App() {
   const [selectedProjectId, setSelectedProjectId] = useState<string>('all');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const syncPayloadRef = useRef<(raw: unknown) => Promise<void>>(async () => {});
+  const liveIframeRef = useRef<HTMLIFrameElement | null>(null);
 
   const showNotice = (msg: string) => {
     setNotice(msg);
@@ -139,6 +170,8 @@ export default function App() {
                 eaEnCoursEur: p.eaEnCoursEur,
                 eaEnCoursCoche: p.eaEnCoursCoche,
                 delaiRestantJours: p.delaiRestantJours,
+                startDate: p.startDate,
+                estimatedEndDate: p.estimatedEndDate,
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
               })
@@ -151,6 +184,7 @@ export default function App() {
               ownerUid: uid,
               projectId: t.projectId,
               title: t.title,
+              details: t.details || '',
               priority: t.priority,
               done: t.done,
               dueDate: t.dueDate,
@@ -166,6 +200,9 @@ export default function App() {
               date: ev.date,
               title: ev.title,
               details: ev.details,
+              startTime: ev.startTime,
+              durationMinutes: ev.durationMinutes,
+              location: ev.location,
               entryType: ev.entryType,
               source: ev.source,
               createdAt: serverTimestamp(),
@@ -179,6 +216,7 @@ export default function App() {
               projectId: n.projectId,
               title: n.title,
               content: n.content,
+              color: n.color,
               pinned: n.pinned,
               createdAt: serverTimestamp(),
               updatedAt: serverTimestamp(),
@@ -206,12 +244,26 @@ export default function App() {
       (snap) => {
         if (snap.exists()) {
           const d = snap.data();
+          const rawInasepUrl = d.inasepUrl || '';
+          const needsMigration =
+            rawInasepUrl === LEGACY_BROKEN_PROJECT_CONTROLER_URL;
+          const resolvedInasepUrl = needsMigration
+            ? PERMANENT_URLS.inasep
+            : rawInasepUrl || PERMANENT_URLS.inasep;
+
+          if (needsMigration) {
+            updateDoc(doc(db, 'controllers', uid), {
+              inasepUrl: PERMANENT_URLS.inasep,
+              updatedAt: serverTimestamp(),
+            }).catch(() => {});
+          }
+
           setController({
             uid: d.uid,
             email: d.email,
             displayName: d.displayName,
             jtdUrl: d.jtdUrl || PERMANENT_URLS.jtd,
-            inasepUrl: d.inasepUrl || PERMANENT_URLS.inasep,
+            inasepUrl: resolvedInasepUrl,
             sitesnapUrl: d.sitesnapUrl || PERMANENT_URLS.sitesnap,
             linksLocked: Boolean(d.linksLocked),
           });
@@ -232,12 +284,17 @@ export default function App() {
             code: d.data().code,
             name: d.data().name,
             commune: d.data().commune,
-            color: d.data().color || PROJECT_COLOR_PALETTE[0].hex,
+            color: safeHexColor(d.data().color, PROJECT_COLOR_PALETTE[0].hex),
             marcheTotalReviseEur: Number(d.data().marcheTotalReviseEur) || 0,
             cumulEaValidesEur: Number(d.data().cumulEaValidesEur) || 0,
             eaEnCoursEur: Number(d.data().eaEnCoursEur) || 0,
             eaEnCoursCoche: Boolean(d.data().eaEnCoursCoche),
             delaiRestantJours: Number(d.data().delaiRestantJours) || 0,
+            startDate: safeDateStr(d.data().startDate, '2026-09-01'),
+            estimatedEndDate: safeDateStr(
+              d.data().estimatedEndDate,
+              '2027-02-28'
+            ),
           }))
         );
       },
@@ -260,6 +317,7 @@ export default function App() {
             id: d.id,
             projectId: d.data().projectId,
             title: d.data().title,
+            details: d.data().details || '',
             priority: d.data().priority,
             done: Boolean(d.data().done),
             dueDate: d.data().dueDate || '',
@@ -284,6 +342,12 @@ export default function App() {
               date: d.data().date,
               title: d.data().title,
               details: d.data().details || '',
+              startTime: d.data().startTime || '09:00',
+              durationMinutes:
+                typeof d.data().durationMinutes === 'number'
+                  ? d.data().durationMinutes
+                  : 60,
+              location: d.data().location || '',
               entryType: d.data().entryType,
               source: d.data().source,
             }))
@@ -310,6 +374,7 @@ export default function App() {
             projectId: d.data().projectId,
             title: d.data().title,
             content: d.data().content || '',
+            color: safeHexColor(d.data().color, POSTIT_COLOR_PALETTE[0].hex),
             pinned: Boolean(d.data().pinned),
             updatedAt: d.data().updatedAt?.toDate
               ? d.data().updatedAt.toDate().toISOString().slice(0, 10)
@@ -332,6 +397,37 @@ export default function App() {
       unsubCalendar();
       unsubNotebooks();
     };
+  }, [authReady, user]);
+
+  useEffect(() => {
+    if (!authReady || !user) return;
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== 'https://doudoufab.github.io') return;
+      const expectedSource = liveIframeRef.current?.contentWindow;
+      if (!expectedSource || event.source !== expectedSource) return;
+
+      const data = event.data as Record<string, unknown> | null;
+      if (!data || typeof data !== 'object') return;
+      if (
+        typeof data.userEmail === 'string' &&
+        user.email &&
+        data.userEmail.toLowerCase() !== user.email.toLowerCase()
+      ) {
+        return;
+      }
+
+      if (data.type === 'PC_SYNC_DOSSIER' && data.payload) {
+        void syncPayloadRef.current(data.payload);
+      } else if (
+        'nomProjet' in data ||
+        'infosAdministratives' in data ||
+        'delais' in data
+      ) {
+        void syncPayloadRef.current(data);
+      }
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
   }, [authReady, user]);
 
   if (!authReady || (user && (loadingProfile || !controller))) {
@@ -366,6 +462,7 @@ export default function App() {
         ownerUid: uid,
         projectId: todo.projectId || 'general',
         title: todo.title.slice(0, 240),
+        details: (todo.details || '').slice(0, 1000),
         priority: todo.priority,
         done: todo.done,
         dueDate: todo.dueDate.slice(0, 20),
@@ -375,6 +472,40 @@ export default function App() {
       showNotice('Tâche ajoutée.');
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, path);
+    }
+  };
+
+  const handleUpdateTodo = async (
+    id: string,
+    patch: Partial<
+      Pick<
+        TodoItem,
+        'projectId' | 'title' | 'details' | 'priority' | 'done' | 'dueDate'
+      >
+    >
+  ) => {
+    const path = `controllers/${uid}/todos/${id}`;
+    try {
+      await updateDoc(doc(db, 'controllers', uid, 'todos', id), {
+        ...(patch.projectId !== undefined
+          ? { projectId: patch.projectId || 'general' }
+          : {}),
+        ...(patch.title !== undefined
+          ? { title: patch.title.slice(0, 240) }
+          : {}),
+        ...(patch.details !== undefined
+          ? { details: patch.details.slice(0, 1000) }
+          : {}),
+        ...(patch.priority !== undefined ? { priority: patch.priority } : {}),
+        ...(patch.done !== undefined ? { done: patch.done } : {}),
+        ...(patch.dueDate !== undefined
+          ? { dueDate: patch.dueDate.slice(0, 20) }
+          : {}),
+        updatedAt: serverTimestamp(),
+      });
+      showNotice('Tâche mise à jour.');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, path);
     }
   };
 
@@ -399,26 +530,32 @@ export default function App() {
     }
   };
 
-  const handleToggleEaEnCours = async (projectId: string, checked: boolean) => {
+  const handleChangeProjectColor = async (projectId: string, color: string) => {
     const path = `controllers/${uid}/projects/${projectId}`;
     try {
       await updateDoc(doc(db, 'controllers', uid, 'projects', projectId), {
-        eaEnCoursCoche: checked,
+        color: safeHexColor(color, PROJECT_COLOR_PALETTE[0].hex),
         updatedAt: serverTimestamp(),
       });
+      showNotice('Couleur du chantier mise à jour.');
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, path);
     }
   };
 
-  const handleChangeProjectColor = async (projectId: string, color: string) => {
+  const handleUpdateProjectDates = async (
+    projectId: string,
+    startDate: string,
+    estimatedEndDate: string
+  ) => {
     const path = `controllers/${uid}/projects/${projectId}`;
     try {
       await updateDoc(doc(db, 'controllers', uid, 'projects', projectId), {
-        color,
+        startDate: safeDateStr(startDate, '2026-09-01'),
+        estimatedEndDate: safeDateStr(estimatedEndDate, '2027-02-28'),
         updatedAt: serverTimestamp(),
       });
-      showNotice('Couleur du chantier mise à jour.');
+      showNotice('Dates du planning mises à jour.');
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, path);
     }
@@ -429,18 +566,22 @@ export default function App() {
   ) => {
     const id = proj.id || `proj-${Date.now()}`;
     const path = `controllers/${uid}/projects/${id}`;
+    const start = safeDateStr(proj.startDate, '2026-09-01');
+    const end = safeDateStr(proj.estimatedEndDate, '2027-02-28');
     try {
       if (proj.id) {
         await updateDoc(doc(db, 'controllers', uid, 'projects', id), {
           code: proj.code.slice(0, 64),
           name: proj.name.slice(0, 180),
           commune: proj.commune.slice(0, 100),
-          color: proj.color,
+          color: safeHexColor(proj.color, PROJECT_COLOR_PALETTE[0].hex),
           marcheTotalReviseEur: proj.marcheTotalReviseEur,
           cumulEaValidesEur: proj.cumulEaValidesEur,
           eaEnCoursEur: proj.eaEnCoursEur,
           eaEnCoursCoche: proj.eaEnCoursCoche,
           delaiRestantJours: proj.delaiRestantJours,
+          startDate: start,
+          estimatedEndDate: end,
           updatedAt: serverTimestamp(),
         });
         showNotice(`Chantier ${proj.code} mis à jour.`);
@@ -450,12 +591,14 @@ export default function App() {
           code: proj.code.slice(0, 64),
           name: proj.name.slice(0, 180),
           commune: proj.commune.slice(0, 100),
-          color: proj.color,
+          color: safeHexColor(proj.color, PROJECT_COLOR_PALETTE[0].hex),
           marcheTotalReviseEur: proj.marcheTotalReviseEur,
           cumulEaValidesEur: proj.cumulEaValidesEur,
           eaEnCoursEur: proj.eaEnCoursEur,
           eaEnCoursCoche: proj.eaEnCoursCoche,
           delaiRestantJours: proj.delaiRestantJours,
+          startDate: start,
+          estimatedEndDate: end,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
@@ -475,6 +618,9 @@ export default function App() {
     date: string;
     title: string;
     details: string;
+    startTime?: string;
+    durationMinutes?: number;
+    location?: string;
   }) => {
     const id = `cal-${Date.now()}`;
     const path = `controllers/${uid}/calendarEntries/${id}`;
@@ -482,17 +628,80 @@ export default function App() {
       await setDoc(doc(db, 'controllers', uid, 'calendarEntries', id), {
         ownerUid: uid,
         projectId: entry.projectId || 'general',
-        date: entry.date,
+        date: safeDateStr(entry.date, new Date().toISOString().slice(0, 10)),
         title: entry.title.slice(0, 200),
-        details: entry.details.slice(0, 600),
+        details: (entry.details || '').slice(0, 600),
+        startTime: (entry.startTime || '09:00').slice(0, 5),
+        durationMinutes: Math.max(
+          0,
+          Math.min(1440, Number(entry.durationMinutes ?? 60))
+        ),
+        location: (entry.location || '').slice(0, 160),
         entryType: 'Annotation',
         source: 'boc',
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
-      showNotice('Annotation ajoutée au calendrier.');
+      showNotice('Événement ajouté au calendrier.');
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, path);
+    }
+  };
+
+  const handleUpdateCalendarEntry = async (
+    id: string,
+    patch: Partial<
+      Pick<
+        CalendarEntry,
+        | 'projectId'
+        | 'date'
+        | 'title'
+        | 'details'
+        | 'startTime'
+        | 'durationMinutes'
+        | 'location'
+      >
+    >
+  ) => {
+    const path = `controllers/${uid}/calendarEntries/${id}`;
+    try {
+      await updateDoc(doc(db, 'controllers', uid, 'calendarEntries', id), {
+        ...(patch.projectId !== undefined
+          ? { projectId: patch.projectId || 'general' }
+          : {}),
+        ...(patch.date !== undefined
+          ? {
+              date: safeDateStr(
+                patch.date,
+                new Date().toISOString().slice(0, 10)
+              ),
+            }
+          : {}),
+        ...(patch.title !== undefined
+          ? { title: patch.title.slice(0, 200) }
+          : {}),
+        ...(patch.details !== undefined
+          ? { details: patch.details.slice(0, 600) }
+          : {}),
+        ...(patch.startTime !== undefined
+          ? { startTime: patch.startTime.slice(0, 5) }
+          : {}),
+        ...(patch.durationMinutes !== undefined
+          ? {
+              durationMinutes: Math.max(
+                0,
+                Math.min(1440, Number(patch.durationMinutes))
+              ),
+            }
+          : {}),
+        ...(patch.location !== undefined
+          ? { location: patch.location.slice(0, 160) }
+          : {}),
+        updatedAt: serverTimestamp(),
+      });
+      showNotice('Paramètres du rendez-vous enregistrés.');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, path);
     }
   };
 
@@ -500,15 +709,245 @@ export default function App() {
     const path = `controllers/${uid}/calendarEntries/${id}`;
     try {
       await deleteDoc(doc(db, 'controllers', uid, 'calendarEntries', id));
+      showNotice('Événement supprimé.');
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, path);
     }
   };
 
-  const handleImportProjectControlerFile = async (file: File) => {
-    try {
-      const text = await file.text();
-      const parsed = JSON.parse(text) as {
+  const syncProjectControlerPayload = async (
+    raw: unknown,
+    opts?: { manual?: boolean }
+  ) => {
+    type PcLineItem = { qte?: number; pu?: number };
+    type PcEaItem = { montant?: number; enCours?: boolean; statut?: string };
+    type PcProjectData = {
+      nomProjet?: string;
+      infosAdministratives?: {
+        intitule?: string;
+        marche?: string;
+        lieu?: string;
+      };
+      marche3P?: PcLineItem[];
+      avenants?: PcLineItem[];
+      historiqueEA?: PcEaItem[];
+      delais?: {
+        os?: string;
+        base?: number;
+        finCalendrier?: string;
+        joursMarques?: Record<string, string>;
+        observationsOverrides?: Record<string, string>;
+      };
+    };
+
+    const isNativePcDossier = (obj: unknown): obj is PcProjectData =>
+      Boolean(
+        obj &&
+          typeof obj === 'object' &&
+          ('nomProjet' in obj ||
+            'infosAdministratives' in obj ||
+            'delais' in obj ||
+            'marche3P' in obj)
+      );
+
+    let updatedProjectsCount = 0;
+    let importedEventsCount = 0;
+
+    const upsertPcDossier = async (d: PcProjectData) => {
+      const hasContent =
+        Boolean(d.infosAdministratives?.marche?.trim()) ||
+        Boolean(d.infosAdministratives?.intitule?.trim()) ||
+        (Array.isArray(d.marche3P) && d.marche3P.length > 0) ||
+        (Array.isArray(d.historiqueEA) && d.historiqueEA.length > 0) ||
+        Boolean(d.delais?.os) ||
+        Object.keys(d.delais?.joursMarques ?? {}).length > 0;
+
+      if (!hasContent && (!d.nomProjet || d.nomProjet === 'Nouveau_Chantier_Vierge')) {
+        return;
+      }
+
+      const code = (
+        d.infosAdministratives?.marche?.trim() ||
+        d.nomProjet?.trim() ||
+        'PC-DOSSIER'
+      ).slice(0, 64);
+      const name = (
+        d.infosAdministratives?.intitule?.trim() ||
+        d.nomProjet?.trim() ||
+        code
+      ).slice(0, 180);
+      const commune = (
+        d.infosAdministratives?.lieu?.trim() || 'Chantier'
+      ).slice(0, 100);
+
+      const sumLines = (rows?: PcLineItem[]) =>
+        (Array.isArray(rows) ? rows : []).reduce(
+          (acc, r) => acc + Math.max(0, (Number(r.qte) || 0) * (Number(r.pu) || 0)),
+          0
+        );
+
+      const marcheTotalReviseEur = Math.max(
+        0,
+        Math.round((sumLines(d.marche3P) + sumLines(d.avenants)) * 100) / 100
+      );
+
+      let cumulEaValidesEur = 0;
+      let eaEnCoursEur = 0;
+      for (const ea of Array.isArray(d.historiqueEA) ? d.historiqueEA : []) {
+        const amt = Math.max(0, Number(ea.montant) || 0);
+        if (ea.enCours || ea.statut === 'en_cours') {
+          eaEnCoursEur += amt;
+        } else {
+          cumulEaValidesEur += amt;
+        }
+      }
+      cumulEaValidesEur = Math.round(cumulEaValidesEur * 100) / 100;
+      eaEnCoursEur = Math.round(eaEnCoursEur * 100) / 100;
+
+      const nomProjetLower = (d.nomProjet || '').trim().toLowerCase();
+      const existingMatch = projects.find(
+        (p) =>
+          p.code.toLowerCase() === code.toLowerCase() ||
+          p.name.toLowerCase() === name.toLowerCase() ||
+          (nomProjetLower && p.name.toLowerCase() === nomProjetLower)
+      );
+      const targetProjId =
+        existingMatch?.id || `proj-${Date.now()}-${updatedProjectsCount}`;
+
+      const startDate = safeDateStr(
+        d.delais?.os,
+        existingMatch?.startDate ?? '2026-09-01'
+      );
+      const estimatedEndDate = safeDateStr(
+        d.delais?.finCalendrier,
+        existingMatch?.estimatedEndDate ?? '2027-02-28'
+      );
+
+      const delaiRestantJours =
+        d.delais?.finCalendrier && /^\d{4}-\d{2}-\d{2}$/.test(d.delais.finCalendrier)
+          ? Math.max(
+              0,
+              Math.ceil(
+                (new Date(estimatedEndDate).getTime() - Date.now()) /
+                  (1000 * 60 * 60 * 24)
+              )
+            )
+          : Math.max(
+              0,
+              Number(d.delais?.base ?? existingMatch?.delaiRestantJours ?? 0)
+            );
+
+      const nextProjectData = {
+        id: targetProjId,
+        code,
+        name,
+        commune,
+        color:
+          existingMatch?.color ??
+          PROJECT_COLOR_PALETTE[
+            (projects.length + updatedProjectsCount) % PROJECT_COLOR_PALETTE.length
+          ].hex,
+        marcheTotalReviseEur:
+          marcheTotalReviseEur > 0
+            ? marcheTotalReviseEur
+            : existingMatch?.marcheTotalReviseEur ?? 0,
+        cumulEaValidesEur:
+          Array.isArray(d.historiqueEA) && d.historiqueEA.length > 0
+            ? cumulEaValidesEur
+            : existingMatch?.cumulEaValidesEur ?? 0,
+        eaEnCoursEur:
+          eaEnCoursEur > 0 ? eaEnCoursEur : existingMatch?.eaEnCoursEur ?? 0,
+        eaEnCoursCoche:
+          eaEnCoursEur > 0 || (existingMatch?.eaEnCoursCoche ?? true),
+        delaiRestantJours,
+        startDate,
+        estimatedEndDate,
+      };
+
+      const projectChanged =
+        !existingMatch ||
+        existingMatch.code !== nextProjectData.code ||
+        existingMatch.name !== nextProjectData.name ||
+        existingMatch.commune !== nextProjectData.commune ||
+        existingMatch.marcheTotalReviseEur !== nextProjectData.marcheTotalReviseEur ||
+        existingMatch.cumulEaValidesEur !== nextProjectData.cumulEaValidesEur ||
+        existingMatch.eaEnCoursEur !== nextProjectData.eaEnCoursEur ||
+        existingMatch.delaiRestantJours !== nextProjectData.delaiRestantJours ||
+        existingMatch.startDate !== nextProjectData.startDate ||
+        existingMatch.estimatedEndDate !== nextProjectData.estimatedEndDate;
+
+      if (projectChanged) {
+        await handleUpsertProject(nextProjectData);
+        updatedProjectsCount += 1;
+      }
+
+      const joursMarques = d.delais?.joursMarques ?? {};
+      const overrides = d.delais?.observationsOverrides ?? {};
+      for (const [dateStr, kind] of Object.entries(joursMarques)) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) continue;
+        if (kind !== 'intemperie' && kind !== 'ferie' && kind !== 'conge') continue;
+
+        const entryType = kind === 'intemperie' ? 'Intempérie' : 'JC';
+        const title = (
+          overrides[dateStr] ||
+          (entryType === 'Intempérie'
+            ? `Intempérie · ${commune}`
+            : `Jour chômé (JC) · ${commune}`)
+        ).slice(0, 200);
+
+        const existingEv = calendarEntries.find(
+          (e) =>
+            e.date === dateStr &&
+            e.source === 'project-controler' &&
+            e.projectId === targetProjId
+        );
+
+        if (existingEv) {
+          if (
+            existingEv.title !== title ||
+            existingEv.location !== commune.slice(0, 160)
+          ) {
+            await updateDoc(
+              doc(db, 'controllers', uid, 'calendarEntries', existingEv.id),
+              {
+                title,
+                location: commune.slice(0, 160),
+                updatedAt: serverTimestamp(),
+              }
+            );
+            importedEventsCount += 1;
+          }
+        } else {
+          const evId = `pc-${dateStr}-${importedEventsCount}-${Date.now()}`;
+          await setDoc(doc(db, 'controllers', uid, 'calendarEntries', evId), {
+            ownerUid: uid,
+            projectId: targetProjId,
+            date: dateStr,
+            title,
+            details: 'Synchronisé depuis Project-Controler V2.',
+            startTime: '08:00',
+            durationMinutes: 240,
+            location: commune.slice(0, 160),
+            entryType,
+            source: 'project-controler',
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+          importedEventsCount += 1;
+        }
+      }
+    };
+
+    if (Array.isArray(raw)) {
+      for (const item of raw) {
+        if (isNativePcDossier(item)) {
+          await upsertPcDossier(item);
+        }
+      }
+    } else if (isNativePcDossier(raw)) {
+      await upsertPcDossier(raw);
+    } else {
+      const parsed = raw as {
         projects?: Array<Partial<Project>>;
         chantiers?: Array<Partial<Project>>;
         intemperies?: Array<{
@@ -522,8 +961,6 @@ export default function App() {
       };
 
       const incomingProjects = parsed.projects ?? parsed.chantiers ?? [];
-      let updatedProjectsCount = 0;
-
       for (const item of incomingProjects) {
         if (!item.code || !item.name) continue;
         const existingMatch = projects.find((p) => p.code === item.code);
@@ -534,41 +971,95 @@ export default function App() {
           commune: item.commune ?? existingMatch?.commune ?? 'Chantier',
           color:
             existingMatch?.color ??
-            PROJECT_COLOR_PALETTE[updatedProjectsCount % PROJECT_COLOR_PALETTE.length].hex,
-          marcheTotalReviseEur: Number(item.marcheTotalReviseEur ?? existingMatch?.marcheTotalReviseEur ?? 0),
-          cumulEaValidesEur: Number(item.cumulEaValidesEur ?? existingMatch?.cumulEaValidesEur ?? 0),
-          eaEnCoursEur: Number(item.eaEnCoursEur ?? existingMatch?.eaEnCoursEur ?? 0),
-          eaEnCoursCoche: Boolean(item.eaEnCoursCoche ?? existingMatch?.eaEnCoursCoche ?? false),
-          delaiRestantJours: Number(item.delaiRestantJours ?? existingMatch?.delaiRestantJours ?? 0),
+            PROJECT_COLOR_PALETTE[
+              updatedProjectsCount % PROJECT_COLOR_PALETTE.length
+            ].hex,
+          marcheTotalReviseEur: Number(
+            item.marcheTotalReviseEur ?? existingMatch?.marcheTotalReviseEur ?? 0
+          ),
+          cumulEaValidesEur: Number(
+            item.cumulEaValidesEur ?? existingMatch?.cumulEaValidesEur ?? 0
+          ),
+          eaEnCoursEur: Number(
+            item.eaEnCoursEur ?? existingMatch?.eaEnCoursEur ?? 0
+          ),
+          eaEnCoursCoche: Boolean(
+            item.eaEnCoursCoche ?? existingMatch?.eaEnCoursCoche ?? true
+          ),
+          delaiRestantJours: Number(
+            item.delaiRestantJours ?? existingMatch?.delaiRestantJours ?? 0
+          ),
+          startDate: safeDateStr(
+            item.startDate,
+            existingMatch?.startDate ?? '2026-09-01'
+          ),
+          estimatedEndDate: safeDateStr(
+            item.estimatedEndDate,
+            existingMatch?.estimatedEndDate ?? '2027-02-28'
+          ),
         });
         updatedProjectsCount += 1;
       }
 
       const incomingEvents = parsed.intemperies ?? [];
-      let importedEventsCount = 0;
       for (const ev of incomingEvents) {
         if (!ev.date || !/^\d{4}-\d{2}-\d{2}$/.test(ev.date)) continue;
         const matchedProj = projects.find(
           (p) => p.id === ev.projectId || p.code === ev.code
         );
-        const id = `pc-${ev.date}-${importedEventsCount}-${Date.now()}`;
-        await setDoc(doc(db, 'controllers', uid, 'calendarEntries', id), {
-          ownerUid: uid,
-          projectId: matchedProj?.id ?? 'general',
-          date: ev.date,
-          title: (ev.title || ev.motif || 'Intempérie Project-Controler').slice(0, 200),
-          details: 'Synchronisé depuis Project-Controler.',
-          entryType: ev.type === 'JC' ? 'JC' : 'Intempérie',
-          source: 'project-controler',
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
+        const targetProjId = matchedProj?.id ?? 'general';
+        const existingEv = calendarEntries.find(
+          (e) =>
+            e.date === ev.date &&
+            e.source === 'project-controler' &&
+            e.projectId === targetProjId
+        );
+        const title = (
+          ev.title ||
+          ev.motif ||
+          'Intempérie Project-Controler'
+        ).slice(0, 200);
+
+        if (existingEv) {
+          await updateDoc(doc(db, 'controllers', uid, 'calendarEntries', existingEv.id), {
+            title,
+            updatedAt: serverTimestamp(),
+          });
+        } else {
+          const id = `pc-${ev.date}-${importedEventsCount}-${Date.now()}`;
+          await setDoc(doc(db, 'controllers', uid, 'calendarEntries', id), {
+            ownerUid: uid,
+            projectId: targetProjId,
+            date: ev.date,
+            title,
+            details: 'Synchronisé depuis Project-Controler.',
+            startTime: '08:00',
+            durationMinutes: 240,
+            location: matchedProj?.commune ?? '',
+            entryType: ev.type === 'JC' ? 'JC' : 'Intempérie',
+            source: 'project-controler',
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+        }
         importedEventsCount += 1;
       }
+    }
 
+    if (opts?.manual || updatedProjectsCount > 0 || importedEventsCount > 0) {
       showNotice(
         `Sync Project-Controler : ${updatedProjectsCount} chantier(s), ${importedEventsCount} intempérie(s)/JC.`
       );
+    }
+  };
+
+  syncPayloadRef.current = syncProjectControlerPayload;
+
+  const handleImportProjectControlerFile = async (file: File) => {
+    try {
+      const text = await file.text();
+      const parsed: unknown = JSON.parse(text);
+      await syncProjectControlerPayload(parsed, { manual: true });
     } catch {
       showNotice('Fichier JSON Project-Controler invalide ou illisible.');
     }
@@ -585,11 +1076,12 @@ export default function App() {
         projectId: note.projectId || 'general',
         title: note.title.slice(0, 180),
         content: note.content.slice(0, 25000),
+        color: safeHexColor(note.color, POSTIT_COLOR_PALETTE[0].hex),
         pinned: note.pinned,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
-      showNotice('Bloc-notes créé.');
+      showNotice('Post-it créé.');
       return id;
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, path);
@@ -598,17 +1090,24 @@ export default function App() {
 
   const handleUpdateNotebook = async (
     id: string,
-    patch: Partial<Pick<NotebookItem, 'title' | 'content' | 'projectId' | 'pinned'>>
+    patch: Partial<
+      Pick<NotebookItem, 'title' | 'content' | 'projectId' | 'color' | 'pinned'>
+    >
   ) => {
     const path = `controllers/${uid}/notebooks/${id}`;
     try {
       await updateDoc(doc(db, 'controllers', uid, 'notebooks', id), {
-        ...(patch.title !== undefined ? { title: patch.title.slice(0, 180) } : {}),
+        ...(patch.title !== undefined
+          ? { title: patch.title.slice(0, 180) }
+          : {}),
         ...(patch.content !== undefined
           ? { content: patch.content.slice(0, 25000) }
           : {}),
         ...(patch.projectId !== undefined
           ? { projectId: patch.projectId || 'general' }
+          : {}),
+        ...(patch.color !== undefined
+          ? { color: safeHexColor(patch.color, POSTIT_COLOR_PALETTE[0].hex) }
           : {}),
         ...(patch.pinned !== undefined ? { pinned: patch.pinned } : {}),
         updatedAt: serverTimestamp(),
@@ -622,7 +1121,7 @@ export default function App() {
     const path = `controllers/${uid}/notebooks/${id}`;
     try {
       await deleteDoc(doc(db, 'controllers', uid, 'notebooks', id));
-      showNotice('Bloc-notes supprimé.');
+      showNotice('Post-it supprimé.');
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, path);
     }
@@ -684,7 +1183,7 @@ export default function App() {
 
   const getLiveAppInfo = (id: 'jtd' | 'inasep' | 'sitesnap') => {
     if (id === 'jtd') {
-      return { title: 'JTD', url: controller.jtdUrl || PERMANENT_URLS.jtd };
+      return { title: 'JDT', url: controller.jtdUrl || PERMANENT_URLS.jtd };
     }
     if (id === 'inasep') {
       return {
@@ -717,17 +1216,17 @@ export default function App() {
       />
 
       <div className="flex-1 min-w-0 flex flex-col">
-        <header className="h-16 bg-white border-b border-slate-200 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-8 sticky top-0 z-30">
-          <div className="flex items-center gap-3 min-w-0">
+        <header className="h-16 bg-white border-b border-slate-200 px-3 sm:px-6 lg:px-8 flex items-center justify-between gap-2 sm:gap-6 sticky top-0 z-30">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <button
               type="button"
               onClick={() => setMobileMenuOpen(true)}
               aria-label="Ouvrir la navigation"
-              className="lg:hidden p-2 -ml-2 rounded-lg text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+              className="lg:hidden p-2 -ml-1 rounded-lg text-slate-600 hover:bg-slate-100 hover:text-slate-900"
             >
               <Menu className="w-5 h-5" />
             </button>
-            <div className="flex items-center gap-2 text-sm min-w-0 truncate">
+            <div className="flex items-center gap-1.5 sm:gap-2 text-sm min-w-0 truncate">
               <span className="text-slate-500 whitespace-nowrap">
                 {activeProject ? activeProject.code : 'B.O.C'}
               </span>
@@ -742,12 +1241,13 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {notice && (
               <span className="hidden md:inline text-xs font-medium text-emerald-700 whitespace-nowrap">
                 {notice}
               </span>
             )}
+            <PWAInstallButton compact />
             <button
               type="button"
               onClick={() => {
@@ -756,19 +1256,25 @@ export default function App() {
                   activeTab === 'connector' ? 'overview' : 'connector'
                 );
               }}
-              className="px-3.5 py-2 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-800 hover:bg-slate-50 transition-colors whitespace-nowrap shrink-0"
+              className="px-2.5 sm:px-3.5 py-2 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-800 hover:bg-slate-50 transition-colors whitespace-nowrap shrink-0"
             >
-              {activeTab === 'connector' ? 'Retour Accueil' : 'Liens & Compte'}
+              <span className="hidden sm:inline">
+                {activeTab === 'connector' ? 'Retour Accueil' : 'Liens & Compte'}
+              </span>
+              <span className="sm:hidden">
+                {activeTab === 'connector' ? 'Accueil' : 'Compte'}
+              </span>
             </button>
           </div>
         </header>
 
-        <main className="flex-1 px-4 sm:px-6 lg:px-8 py-6 max-w-[1440px] w-full mx-auto">
+        <main className="flex-1 px-3.5 sm:px-6 lg:px-8 pt-4 sm:py-6 pb-24 lg:pb-8 max-w-[1440px] w-full mx-auto">
           {liveAppId ? (
             <LiveAppEmbedView
               appId={liveAppId}
               title={getLiveAppInfo(liveAppId).title}
               url={getLiveAppInfo(liveAppId).url}
+              iframeRef={liveAppId === 'inasep' ? liveIframeRef : undefined}
               onBackHome={() => {
                 setLiveAppId(null);
                 setActiveTab('overview');
@@ -790,10 +1296,21 @@ export default function App() {
                     setActiveTab(tab);
                   }}
                   onOpenLiveApp={(appId) => setLiveAppId(appId)}
-                  onToggleEaEnCours={handleToggleEaEnCours}
                   onChangeProjectColor={handleChangeProjectColor}
                   onUpsertProject={handleUpsertProject}
                   onImportProjectControlerFile={handleImportProjectControlerFile}
+                />
+              )}
+
+              {activeTab === 'planning' && (
+                <PlanningView
+                  projects={
+                    selectedProjectId === 'all'
+                      ? projects
+                      : projects.filter((p) => p.id === selectedProjectId)
+                  }
+                  onUpdateProjectDates={handleUpdateProjectDates}
+                  onChangeProjectColor={handleChangeProjectColor}
                 />
               )}
 
@@ -803,6 +1320,7 @@ export default function App() {
                   selectedProjectId={selectedProjectId}
                   todos={filterByProject(todos)}
                   onAddTodo={handleAddTodo}
+                  onUpdateTodo={handleUpdateTodo}
                   onToggleDone={handleToggleTodoDone}
                   onDeleteTodo={handleDeleteTodo}
                 />
@@ -816,6 +1334,7 @@ export default function App() {
                     controller.inasepUrl || PERMANENT_URLS.inasep
                   }
                   onAddAnnotation={handleAddAnnotation}
+                  onUpdateEntry={handleUpdateCalendarEntry}
                   onDeleteEntry={handleDeleteCalendarEntry}
                   onChangeProjectColor={handleChangeProjectColor}
                   onImportProjectControlerFile={handleImportProjectControlerFile}
@@ -842,6 +1361,44 @@ export default function App() {
             </>
           )}
         </main>
+
+        <nav
+          aria-label="Navigation mobile"
+          className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur border-t border-slate-200 px-1 pt-1.5 pb-[max(0.45rem,env(safe-area-inset-bottom))] grid grid-cols-5 gap-0.5"
+        >
+          {(
+            [
+              { id: 'overview', label: 'Accueil', icon: LayoutGrid },
+              { id: 'planning', label: 'Planning', icon: GanttChartSquare },
+              { id: 'todo', label: 'To-Do', icon: CheckSquare },
+              { id: 'calendar', label: 'Calendrier', icon: Calendar },
+              { id: 'notes', label: 'Notes', icon: NotebookPen },
+            ] as const
+          ).map((item) => {
+            const Icon = item.icon;
+            const isActive = !liveAppId && activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  setLiveAppId(null);
+                  setActiveTab(item.id);
+                }}
+                className={`flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-lg text-[11px] font-medium transition-colors ${
+                  isActive
+                    ? 'text-blue-700 bg-blue-50/70'
+                    : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                <Icon className="w-4 h-4 shrink-0" />
+                <span className="truncate max-w-full px-0.5">{item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+
+        <OfflineIndicator />
       </div>
     </div>
   );

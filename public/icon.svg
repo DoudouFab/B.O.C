@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="B.O.C — Boîte à Outils du Contrôleur">
+  <defs>
+    <linearGradient id="boc-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1D4ED8" />
+      <stop offset="100%" stop-color="#0F2E8A" />
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="512" height="512" rx="112" fill="url(#boc-bg)" />
+  <!-- Handle -->
+  <path d="M196 144 L212 114 L300 114 L316 144" fill="none" stroke="#FFFFFF" stroke-width="20" stroke-linejoin="round" stroke-linecap="round" />
+  <rect x="172" y="140" width="168" height="16" rx="8" fill="#FFFFFF" />
+  <!-- Toolbox Lid -->
+  <rect x="108" y="164" width="296" height="56" rx="18" fill="#FFFFFF" />
+  <!-- Toolbox Body -->
+  <rect x="116" y="226" width="280" height="176" rx="22" fill="#FFFFFF" />
+  <!-- Latches -->
+  <rect x="156" y="206" width="32" height="38" rx="8" fill="#1D4ED8" stroke="#FFFFFF" stroke-width="6" />
+  <rect x="240" y="206" width="32" height="44" rx="8" fill="#1D4ED8" stroke="#FFFFFF" stroke-width="6" />
+  <rect x="324" y="206" width="32" height="38" rx="8" fill="#1D4ED8" stroke="#FFFFFF" stroke-width="6" />
+  <!-- B.O.C Badge inside toolbox -->
+  <rect x="148" y="274" width="216" height="84" rx="14" fill="#EFF6FF" stroke="#1D4ED8" stroke-width="8" />
+  <text
+    x="256"
+    y="334"
+    text-anchor="middle"
+    font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+    font-size="58"
+    font-weight="900"
+    letter-spacing="4"
+    fill="#1E3A8A"
+  >B.O.C</text>
+</svg>

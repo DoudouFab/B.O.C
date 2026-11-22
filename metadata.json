@@ -1,6 +1,6 @@
 {
   "name": "INASEP Ops Hub",
-  "description": "Tableau de bord unifié regroupant JTD, V2ProjectController — INASEP et SiteSnap pour le pilotage des chantiers d'égouttage et de voirie.",
+  "description": "Tableau de bord unifié regroupant JDT, V2ProjectController — INASEP et SiteSnap pour le pilotage des chantiers d'égouttage et de voirie.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

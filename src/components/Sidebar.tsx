@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   LayoutGrid,
+  GanttChartSquare,
   CheckSquare,
   Calendar,
   NotebookPen,
@@ -30,6 +31,7 @@ const NAV_ITEMS: {
   icon: React.ComponentType<{ className?: string }>;
 }[] = [
   { id: 'overview', label: 'Accueil · 3 Applis', icon: LayoutGrid },
+  { id: 'planning', label: 'Planning (Gantt)', icon: GanttChartSquare },
   { id: 'todo', label: 'To-Do Liste', icon: CheckSquare },
   { id: 'calendar', label: 'Calendrier', icon: Calendar },
   { id: 'notes', label: 'Prise de notes', icon: NotebookPen },

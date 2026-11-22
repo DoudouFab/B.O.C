@@ -9,6 +9,19 @@ export const PROJECT_COLOR_PALETTE: { label: string; hex: string }[] = [
   { label: 'Sarcelle', hex: '#0F766E' },
 ];
 
+export const POSTIT_COLOR_PALETTE: {
+  label: string;
+  hex: string;
+  borderHex: string;
+}[] = [
+  { label: 'Jaune Post-it', hex: '#FEF9C3', borderHex: '#FDE047' },
+  { label: 'Bleu ciel', hex: '#E0F2FE', borderHex: '#7DD3FC' },
+  { label: 'Vert sauge', hex: '#DCFCE7', borderHex: '#86EFAC' },
+  { label: 'Pêche', hex: '#FFEDD5', borderHex: '#FDBA74' },
+  { label: 'Lavande', hex: '#F3E8FF', borderHex: '#D8B4FE' },
+  { label: 'Blanc', hex: '#FFFFFF', borderHex: '#E2E8F0' },
+];
+
 export const INITIAL_PROJECTS: Project[] = [
   {
     id: 'proj-profondeville',
@@ -21,6 +34,8 @@ export const INITIAL_PROJECTS: Project[] = [
     eaEnCoursEur: 62400,
     eaEnCoursCoche: true,
     delaiRestantJours: 38,
+    startDate: '2026-09-01',
+    estimatedEndDate: '2027-01-25',
   },
   {
     id: 'proj-gembloux',
@@ -33,6 +48,8 @@ export const INITIAL_PROJECTS: Project[] = [
     eaEnCoursEur: 48200,
     eaEnCoursCoche: true,
     delaiRestantJours: 74,
+    startDate: '2026-10-12',
+    estimatedEndDate: '2027-03-18',
   },
   {
     id: 'proj-floreffe',
@@ -45,6 +62,8 @@ export const INITIAL_PROJECTS: Project[] = [
     eaEnCoursEur: 25500,
     eaEnCoursCoche: false,
     delaiRestantJours: 9,
+    startDate: '2026-08-18',
+    estimatedEndDate: '2026-12-08',
   },
 ];
 
@@ -55,7 +74,7 @@ export const INITIAL_TODOS: TodoItem[] = [
     title: 'Vérifier réception lit de sable avant remblai secteur bas',
     priority: 'Haute',
     done: false,
-    dueDate: '2026-11-20',
+    dueDate: '2026-11-21',
   },
   {
     id: 'todo-2',
@@ -63,7 +82,7 @@ export const INITIAL_TODOS: TodoItem[] = [
     title: 'Contrôler EA n°4 dans Project-Controler',
     priority: 'Haute',
     done: false,
-    dueDate: '2026-11-21',
+    dueDate: '2026-11-22',
   },
   {
     id: 'todo-3',
@@ -71,7 +90,7 @@ export const INITIAL_TODOS: TodoItem[] = [
     title: 'Relancer entrepreneur pour fiches techniques tampons D400',
     priority: 'Normale',
     done: false,
-    dueDate: '2026-11-22',
+    dueDate: '2026-11-24',
   },
   {
     id: 'todo-4',
@@ -87,9 +106,12 @@ export const INITIAL_CALENDAR_ENTRIES: CalendarEntry[] = [
   {
     id: 'cal-1',
     projectId: 'proj-profondeville',
-    date: '2026-11-20',
-    title: 'Réunion de chantier hebdomadaire (09h00)',
+    date: '2026-11-21',
+    title: 'Réunion de chantier hebdomadaire',
     details: 'Point sur avancement égouttage et déviation riverains.',
+    startTime: '09:00',
+    durationMinutes: 90,
+    location: 'Rue de la Station, Profondeville',
     entryType: 'Annotation',
     source: 'boc',
   },
@@ -99,6 +121,9 @@ export const INITIAL_CALENDAR_ENTRIES: CalendarEntry[] = [
     date: '2026-11-17',
     title: 'Intempérie · Pluie continue (matinée)',
     details: 'Synchronisé depuis Project-Controler (arrêt terrassement).',
+    startTime: '08:00',
+    durationMinutes: 240,
+    location: 'Profondeville',
     entryType: 'Intempérie',
     source: 'project-controler',
   },
@@ -108,6 +133,9 @@ export const INITIAL_CALENDAR_ENTRIES: CalendarEntry[] = [
     date: '2026-11-19',
     title: 'JC · Gel matinal (-3 °C)',
     details: 'Synchronisé depuis Project-Controler (pas de bétonnage avant 11h).',
+    startTime: '07:30',
+    durationMinutes: 210,
+    location: 'Gembloux',
     entryType: 'JC',
     source: 'project-controler',
   },
@@ -117,6 +145,9 @@ export const INITIAL_CALENDAR_ENTRIES: CalendarEntry[] = [
     date: '2026-11-25',
     title: 'Visite pré-réception commune',
     details: 'Contrôle des filets d’eau et avaloirs avec l’échevin des travaux.',
+    startTime: '14:00',
+    durationMinutes: 60,
+    location: 'Rue du Moulin, Floreffe',
     entryType: 'Annotation',
     source: 'boc',
   },
@@ -126,19 +157,31 @@ export const INITIAL_NOTEBOOKS: NotebookItem[] = [
   {
     id: 'note-1',
     projectId: 'proj-profondeville',
-    title: 'Notes chantier Profondeville — Semaine 47',
+    title: 'Chantier Profondeville — Semaine 47',
     content:
       '• Riverain n°24 : demande raccordement eau pluviale en attente.\n• Remarque conducteur : prévoir signalisation renforcée au carrefour pour vendredi.\n• À vérifier au prochain passage : niveau radier chambre R15.',
+    color: '#FEF9C3',
     pinned: true,
-    updatedAt: '2026-11-20',
+    updatedAt: '2026-11-21',
   },
   {
     id: 'note-2',
     projectId: 'general',
-    title: 'Mémo administratif & procédures INASEP',
+    title: 'Mémo administratif INASEP',
     content:
       '• Toujours encoder les jours d’intempérie et JC directement dans Project-Controler.\n• Exporter le récapitulatif Project-Controler avant chaque réunion mensuelle pour garder B.O.C à jour.',
+    color: '#E0F2FE',
     pinned: false,
     updatedAt: '2026-11-19',
+  },
+  {
+    id: 'note-3',
+    projectId: 'proj-gembloux',
+    title: 'Livraison tampons fonte D400',
+    content:
+      '• Vérifier marquage EN124 sur le lot livré mardi.\n• Stocker sur zone clôturée chaussée de Charleroi.',
+    color: '#DCFCE7',
+    pinned: false,
+    updatedAt: '2026-11-20',
   },
 ];

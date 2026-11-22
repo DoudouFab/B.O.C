@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ArrowRight } from 'lucide-react';
 import { signInWithPopup } from 'firebase/auth';
 import { auth, googleProvider } from '../firebase';
+import { PWAInstallButton } from './PWAInstallButton';
 
 export const LoginGate: React.FC = () => {
   const [loading, setLoading] = useState(false);
@@ -43,7 +44,7 @@ export const LoginGate: React.FC = () => {
         </div>
 
         <p className="text-sm text-slate-600 leading-relaxed">
-          Connectez votre compte pour ouvrir votre espace regroupant JTD, Project-Controler, Appli-Photo, To-Do liste, Calendrier et Prise de notes.
+          Connectez votre compte pour ouvrir votre espace regroupant JDT, Project-Controler, Appli-Photo, To-Do liste, Calendrier et Prise de notes.
         </p>
 
         {error && (
@@ -66,9 +67,12 @@ export const LoginGate: React.FC = () => {
           <ArrowRight className="w-4 h-4" />
         </button>
 
-        <p className="text-[11px] text-slate-400 text-center pt-2 border-t border-slate-100">
-          Fabien Pirquin · Boîte à Outils du Contrôleur
-        </p>
+        <div className="pt-2 border-t border-slate-100 flex flex-col items-center gap-3">
+          <PWAInstallButton />
+          <p className="text-[11px] text-slate-400 text-center">
+            Fabien Pirquin · Boîte à Outils du Contrôleur
+          </p>
+        </div>
       </div>
     </div>
   );

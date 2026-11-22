@@ -74,8 +74,9 @@ export const AppsConnectorView: React.FC<AppsConnectorViewProps> = ({
   const appsList = [
     {
       id: 'jtd',
-      name: 'JTD',
+      name: 'JDT',
       desc: 'Gestion intelligente des tâches et suivi des processus terrain.',
+      iconSrc: '/app-icons/jdt-icon.svg',
       value: controller.linksLocked ? controller.jtdUrl : jtdUrl,
       setter: setJtdUrl,
     },
@@ -83,6 +84,7 @@ export const AppsConnectorView: React.FC<AppsConnectorViewProps> = ({
       id: 'inasep',
       name: 'Project-Controler — INASEP',
       desc: 'Gestion de chantier d’égouttage et voirie — bordereau 3P, tronçons, carnet de mesurage.',
+      iconSrc: '/app-icons/project-controler-icon.png',
       value: controller.linksLocked ? controller.inasepUrl : inasepUrl,
       setter: setInasepUrl,
     },
@@ -90,6 +92,7 @@ export const AppsConnectorView: React.FC<AppsConnectorViewProps> = ({
       id: 'sitesnap',
       name: 'Appli-Photo (SiteSnap)',
       desc: 'Organisation et classement automatique des photos de chantier vers OneDrive.',
+      iconSrc: '/app-icons/appli-photo-icon.png',
       value: controller.linksLocked ? controller.sitesnapUrl : sitesnapUrl,
       setter: setSitesnapUrl,
     },
@@ -148,12 +151,20 @@ export const AppsConnectorView: React.FC<AppsConnectorViewProps> = ({
                   key={app.id}
                   className="bg-white border border-slate-200 rounded-xl p-5 flex flex-col justify-between gap-4"
                 >
-                  <div className="space-y-1.5">
-                    <h3 className="text-base font-semibold text-slate-900">
-                      {app.name}
-                    </h3>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={app.iconSrc}
+                        alt={`Icône ${app.name}`}
+                        referrerPolicy="no-referrer"
+                        className="w-10 h-10 rounded-lg border border-slate-200 bg-white object-contain shrink-0"
+                      />
+                      <h3 className="text-base font-semibold text-slate-900">
+                        {app.name}
+                      </h3>
+                    </div>
                     <p className="text-xs text-slate-600">{app.desc}</p>
-                    <p className="text-xs font-mono text-slate-700 break-all pt-2">
+                    <p className="text-xs font-mono text-slate-700 break-all pt-1">
                       {hasUrl ? app.value : 'Aucun lien configuré'}
                     </p>
                   </div>
