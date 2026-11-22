@@ -1,9 +1,11 @@
-import { initializeApp } from 'firebase/app';
+import { getApps, initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { doc, getDocFromServer, getFirestore } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
-const app = initializeApp(firebaseConfig);
+const app =
+  getApps().find((a) => a.name === 'boc-app') ??
+  initializeApp(firebaseConfig, 'boc-app');
 
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
