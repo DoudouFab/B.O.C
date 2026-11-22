@@ -34,7 +34,7 @@ interface OverviewViewProps {
     project: Omit<Project, 'id'> & { id?: string }
   ) => Promise<void>;
   onDeleteProject: (projectId: string) => Promise<void>;
-  onImportProjectControlerFile: (file: File) => Promise<void>;
+  onImportProjectControlerFile: (files: File | FileList | File[]) => Promise<void>;
 }
 
 export const OverviewView: React.FC<OverviewViewProps> = ({
@@ -458,18 +458,22 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
               onClick={() => syncFileRef.current?.click()}
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors whitespace-nowrap"
             >
-              <Upload className="w-3.5 h-3.5" />
-              <span>Sync Project-Controler (.JSON)</span>
+              <Upload className="w-3.5 h-3.5 text-sky-700" />
+              <span>Importer / Sync (.JSON)</span>
             </button>
             <input
               ref={syncFileRef}
               type="file"
+              multiple
               accept=".json,application/json"
               onChange={async (e) => {
-                const file = e.target.files?.[0];
-                if (file) {
-                  await onImportProjectControlerFile(file);
+                const files = e.target.files;
+                if (files && files.length > 0) {
+                  await onImportProjectControlerFile(files);
                   if (syncFileRef.current) syncFileRef.current.value = '';
+                  if (showProjectForm && !editingProject) {
+                    setShowProjectForm(false);
+                  }
                 }
               }}
               className="hidden"
@@ -491,11 +495,23 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
             onSubmit={handleSaveProject}
             className="p-5 bg-slate-50 border-b border-slate-200 space-y-4"
           >
-            <h3 className="text-sm font-semibold text-slate-900">
-              {editingProject
-                ? `Mettre à jour ${editingProject.code}`
-                : 'Ajouter un chantier actif'}
-            </h3>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold text-slate-900">
+                {editingProject
+                  ? `Mettre à jour ${editingProject.code}`
+                  : 'Ajouter un chantier actif'}
+              </h3>
+              {!editingProject && (
+                <button
+                  type="button"
+                  onClick={() => syncFileRef.current?.click()}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-sky-200 bg-sky-50 text-xs font-semibold text-sky-800 hover:bg-sky-100 transition-colors whitespace-nowrap"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Créer depuis un fichier Project-Controler (.JSON)</span>
+                </button>
+              )}
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">

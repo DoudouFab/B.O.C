@@ -573,11 +573,12 @@ export default function App() {
     proj: Omit<Project, 'id'> & { id?: string }
   ) => {
     const id = proj.id || `proj-${Date.now()}`;
+    const isExisting = Boolean(proj.id && projects.some((p) => p.id === proj.id));
     const path = `controllers/${uid}/projects/${id}`;
     const start = safeDateStr(proj.startDate, '2026-09-01');
     const end = safeDateStr(proj.estimatedEndDate, '2027-02-28');
     try {
-      if (proj.id) {
+      if (isExisting) {
         await updateDoc(doc(db, 'controllers', uid, 'projects', id), {
           code: proj.code.slice(0, 64),
           name: proj.name.slice(0, 180),
@@ -615,7 +616,7 @@ export default function App() {
     } catch (error) {
       handleFirestoreError(
         error,
-        proj.id ? OperationType.UPDATE : OperationType.CREATE,
+        isExisting ? OperationType.UPDATE : OperationType.CREATE,
         path
       );
     }
@@ -738,9 +739,21 @@ export default function App() {
 
   const syncProjectControlerPayload = async (
     raw: unknown,
-    opts?: { manual?: boolean }
-  ) => {
-    type PcLineItem = { qte?: number; pu?: number };
+    opts?: { manual?: boolean; fallbackName?: string }
+  ): Promise<{
+    created: number;
+    updated: number;
+    events: number;
+    recognized: boolean;
+  }> => {
+    type PcLineItem = {
+      qte?: number;
+      quantite?: number;
+      pu?: number;
+      prixUnitaire?: number;
+      total?: number;
+      montant?: number;
+    };
     type PcEaItem = { montant?: number; enCours?: boolean; statut?: string };
     type PcProjectData = {
       nomProjet?: string;
@@ -761,6 +774,19 @@ export default function App() {
       };
     };
 
+    const normalizeDateStr = (val: unknown, fallback: string): string => {
+      if (typeof val !== 'string') return fallback;
+      const trimmed = val.trim();
+      if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
+        return trimmed.slice(0, 10);
+      }
+      const frMatch = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(trimmed);
+      if (frMatch) {
+        return `${frMatch[3]}-${frMatch[2]}-${frMatch[1]}`;
+      }
+      return fallback;
+    };
+
     const isNativePcDossier = (obj: unknown): obj is PcProjectData =>
       Boolean(
         obj &&
@@ -768,33 +794,52 @@ export default function App() {
           ('nomProjet' in obj ||
             'infosAdministratives' in obj ||
             'delais' in obj ||
-            'marche3P' in obj)
+            'marche3P' in obj ||
+            'historiqueEA' in obj)
       );
 
+    let createdProjectsCount = 0;
     let updatedProjectsCount = 0;
     let importedEventsCount = 0;
+    let recognized = false;
+    const knownProjects: Project[] = [...projects];
 
     const upsertPcDossier = async (d: PcProjectData) => {
+      recognized = true;
+      const fallbackBaseName = opts?.fallbackName
+        ? opts.fallbackName.replace(/\.json$/i, '').trim()
+        : '';
+
+      const rawNomProjet =
+        d.nomProjet && d.nomProjet !== 'Nouveau_Chantier_Vierge'
+          ? d.nomProjet.trim()
+          : '';
+      const rawCode = d.infosAdministratives?.marche?.trim() || '';
+      const rawName = d.infosAdministratives?.intitule?.trim() || '';
+
       const hasContent =
-        Boolean(d.infosAdministratives?.marche?.trim()) ||
-        Boolean(d.infosAdministratives?.intitule?.trim()) ||
+        Boolean(rawCode) ||
+        Boolean(rawName) ||
+        Boolean(rawNomProjet) ||
         (Array.isArray(d.marche3P) && d.marche3P.length > 0) ||
         (Array.isArray(d.historiqueEA) && d.historiqueEA.length > 0) ||
         Boolean(d.delais?.os) ||
         Object.keys(d.delais?.joursMarques ?? {}).length > 0;
 
-      if (!hasContent && (!d.nomProjet || d.nomProjet === 'Nouveau_Chantier_Vierge')) {
+      if (!opts?.manual && !hasContent) {
         return;
       }
 
       const code = (
-        d.infosAdministratives?.marche?.trim() ||
-        d.nomProjet?.trim() ||
+        rawCode ||
+        rawNomProjet ||
+        fallbackBaseName ||
         'PC-DOSSIER'
       ).slice(0, 64);
       const name = (
-        d.infosAdministratives?.intitule?.trim() ||
-        d.nomProjet?.trim() ||
+        rawName ||
+        rawNomProjet ||
+        fallbackBaseName ||
         code
       ).slice(0, 180);
       const commune = (
@@ -802,10 +847,13 @@ export default function App() {
       ).slice(0, 100);
 
       const sumLines = (rows?: PcLineItem[]) =>
-        (Array.isArray(rows) ? rows : []).reduce(
-          (acc, r) => acc + Math.max(0, (Number(r.qte) || 0) * (Number(r.pu) || 0)),
-          0
-        );
+        (Array.isArray(rows) ? rows : []).reduce((acc, r) => {
+          const qte = Number(r.qte ?? r.quantite ?? 0) || 0;
+          const pu = Number(r.pu ?? r.prixUnitaire ?? 0) || 0;
+          const direct = Number(r.total ?? r.montant ?? 0) || 0;
+          const lineVal = qte * pu > 0 ? qte * pu : direct;
+          return acc + Math.max(0, lineVal);
+        }, 0);
 
       const marcheTotalReviseEur = Math.max(
         0,
@@ -825,27 +873,39 @@ export default function App() {
       cumulEaValidesEur = Math.round(cumulEaValidesEur * 100) / 100;
       eaEnCoursEur = Math.round(eaEnCoursEur * 100) / 100;
 
-      const nomProjetLower = (d.nomProjet || '').trim().toLowerCase();
-      const existingMatch = projects.find(
-        (p) =>
-          p.code.toLowerCase() === code.toLowerCase() ||
-          p.name.toLowerCase() === name.toLowerCase() ||
-          (nomProjetLower && p.name.toLowerCase() === nomProjetLower)
-      );
-      const targetProjId =
-        existingMatch?.id || `proj-${Date.now()}-${updatedProjectsCount}`;
+      const existingMatch = knownProjects.find((p) => {
+        if (rawCode && p.code.toLowerCase() === rawCode.toLowerCase()) return true;
+        if (rawName && p.name.toLowerCase() === rawName.toLowerCase()) return true;
+        if (rawNomProjet && p.name.toLowerCase() === rawNomProjet.toLowerCase()) {
+          return true;
+        }
+        if (
+          !rawCode &&
+          !rawName &&
+          !rawNomProjet &&
+          fallbackBaseName &&
+          p.name.toLowerCase() === fallbackBaseName.toLowerCase()
+        ) {
+          return true;
+        }
+        return false;
+      });
 
-      const startDate = safeDateStr(
+      const opIndex = createdProjectsCount + updatedProjectsCount;
+      const targetProjId =
+        existingMatch?.id || `proj-${Date.now()}-${opIndex}`;
+
+      const startDate = normalizeDateStr(
         d.delais?.os,
         existingMatch?.startDate ?? '2026-09-01'
       );
-      const estimatedEndDate = safeDateStr(
+      const estimatedEndDate = normalizeDateStr(
         d.delais?.finCalendrier,
         existingMatch?.estimatedEndDate ?? '2027-02-28'
       );
 
       const delaiRestantJours =
-        d.delais?.finCalendrier && /^\d{4}-\d{2}-\d{2}$/.test(d.delais.finCalendrier)
+        /^\d{4}-\d{2}-\d{2}$/.test(estimatedEndDate) && d.delais?.finCalendrier
           ? Math.max(
               0,
               Math.ceil(
@@ -858,7 +918,7 @@ export default function App() {
               Number(d.delais?.base ?? existingMatch?.delaiRestantJours ?? 0)
             );
 
-      const nextProjectData = {
+      const nextProjectData: Project = {
         id: targetProjId,
         code,
         name,
@@ -866,7 +926,7 @@ export default function App() {
         color:
           existingMatch?.color ??
           PROJECT_COLOR_PALETTE[
-            (projects.length + updatedProjectsCount) % PROJECT_COLOR_PALETTE.length
+            knownProjects.length % PROJECT_COLOR_PALETTE.length
           ].hex,
         marcheTotalReviseEur:
           marcheTotalReviseEur > 0
@@ -897,7 +957,11 @@ export default function App() {
         existingMatch.startDate !== nextProjectData.startDate ||
         existingMatch.estimatedEndDate !== nextProjectData.estimatedEndDate;
 
-      if (projectChanged) {
+      if (!existingMatch) {
+        await handleUpsertProject(nextProjectData);
+        createdProjectsCount += 1;
+        knownProjects.push(nextProjectData);
+      } else if (projectChanged) {
         await handleUpsertProject(nextProjectData);
         updatedProjectsCount += 1;
       }
@@ -959,14 +1023,48 @@ export default function App() {
       }
     };
 
+    const rawObj =
+      raw && typeof raw === 'object' && !Array.isArray(raw)
+        ? (raw as Record<string, unknown>)
+        : null;
+
+    const unwrappedSingle =
+      rawObj &&
+      !isNativePcDossier(rawObj) &&
+      (isNativePcDossier(rawObj.dossier)
+        ? rawObj.dossier
+        : isNativePcDossier(rawObj.project)
+        ? rawObj.project
+        : isNativePcDossier(rawObj.projectData)
+        ? rawObj.projectData
+        : isNativePcDossier(rawObj.data)
+        ? rawObj.data
+        : null);
+
+    const unwrappedList =
+      rawObj &&
+      (Array.isArray(rawObj.dossiers)
+        ? rawObj.dossiers
+        : Array.isArray(rawObj.projets)
+        ? rawObj.projets
+        : null);
+
     if (Array.isArray(raw)) {
       for (const item of raw) {
         if (isNativePcDossier(item)) {
           await upsertPcDossier(item);
         }
       }
+    } else if (unwrappedList) {
+      for (const item of unwrappedList) {
+        if (isNativePcDossier(item)) {
+          await upsertPcDossier(item);
+        }
+      }
     } else if (isNativePcDossier(raw)) {
       await upsertPcDossier(raw);
+    } else if (unwrappedSingle) {
+      await upsertPcDossier(unwrappedSingle);
     } else {
       const parsed = raw as {
         projects?: Array<Partial<Project>>;
@@ -981,19 +1079,31 @@ export default function App() {
         }>;
       };
 
-      const incomingProjects = parsed.projects ?? parsed.chantiers ?? [];
+      const incomingProjects = parsed?.projects ?? parsed?.chantiers ?? [];
+      if (incomingProjects.length > 0 || (parsed?.intemperies?.length ?? 0) > 0) {
+        recognized = true;
+      }
+
       for (const item of incomingProjects) {
-        if (!item.code || !item.name) continue;
-        const existingMatch = projects.find((p) => p.code === item.code);
-        await handleUpsertProject({
-          id: existingMatch?.id,
-          code: item.code,
-          name: item.name,
+        if (!item.code && !item.name) continue;
+        const code = (item.code || item.name || 'PC-DOSSIER').slice(0, 64);
+        const name = (item.name || item.code || 'Chantier').slice(0, 180);
+        const existingMatch = knownProjects.find(
+          (p) =>
+            p.code.toLowerCase() === code.toLowerCase() ||
+            p.name.toLowerCase() === name.toLowerCase()
+        );
+        const opIndex = createdProjectsCount + updatedProjectsCount;
+        const targetId = existingMatch?.id || `proj-${Date.now()}-${opIndex}`;
+        const nextProj: Project = {
+          id: targetId,
+          code,
+          name,
           commune: item.commune ?? existingMatch?.commune ?? 'Chantier',
           color:
             existingMatch?.color ??
             PROJECT_COLOR_PALETTE[
-              updatedProjectsCount % PROJECT_COLOR_PALETTE.length
+              knownProjects.length % PROJECT_COLOR_PALETTE.length
             ].hex,
           marcheTotalReviseEur: Number(
             item.marcheTotalReviseEur ?? existingMatch?.marcheTotalReviseEur ?? 0
@@ -1010,22 +1120,28 @@ export default function App() {
           delaiRestantJours: Number(
             item.delaiRestantJours ?? existingMatch?.delaiRestantJours ?? 0
           ),
-          startDate: safeDateStr(
+          startDate: normalizeDateStr(
             item.startDate,
             existingMatch?.startDate ?? '2026-09-01'
           ),
-          estimatedEndDate: safeDateStr(
+          estimatedEndDate: normalizeDateStr(
             item.estimatedEndDate,
             existingMatch?.estimatedEndDate ?? '2027-02-28'
           ),
-        });
-        updatedProjectsCount += 1;
+        };
+        await handleUpsertProject(nextProj);
+        if (!existingMatch) {
+          createdProjectsCount += 1;
+          knownProjects.push(nextProj);
+        } else {
+          updatedProjectsCount += 1;
+        }
       }
 
-      const incomingEvents = parsed.intemperies ?? [];
+      const incomingEvents = parsed?.intemperies ?? [];
       for (const ev of incomingEvents) {
         if (!ev.date || !/^\d{4}-\d{2}-\d{2}$/.test(ev.date)) continue;
-        const matchedProj = projects.find(
+        const matchedProj = knownProjects.find(
           (p) => p.id === ev.projectId || p.code === ev.code
         );
         const targetProjId = matchedProj?.id ?? 'general';
@@ -1042,10 +1158,13 @@ export default function App() {
         ).slice(0, 200);
 
         if (existingEv) {
-          await updateDoc(doc(db, 'controllers', uid, 'calendarEntries', existingEv.id), {
-            title,
-            updatedAt: serverTimestamp(),
-          });
+          await updateDoc(
+            doc(db, 'controllers', uid, 'calendarEntries', existingEv.id),
+            {
+              title,
+              updatedAt: serverTimestamp(),
+            }
+          );
         } else {
           const id = `pc-${ev.date}-${importedEventsCount}-${Date.now()}`;
           await setDoc(doc(db, 'controllers', uid, 'calendarEntries', id), {
@@ -1067,22 +1186,69 @@ export default function App() {
       }
     }
 
-    if (opts?.manual || updatedProjectsCount > 0 || importedEventsCount > 0) {
+    if (
+      !opts?.manual &&
+      (createdProjectsCount > 0 || updatedProjectsCount > 0 || importedEventsCount > 0)
+    ) {
       showNotice(
-        `Sync Project-Controler : ${updatedProjectsCount} chantier(s), ${importedEventsCount} intempérie(s)/JC.`
+        `Sync Project-Controler : ${createdProjectsCount} créé(s), ${updatedProjectsCount} mis à jour, ${importedEventsCount} intempérie(s)/JC.`
       );
     }
+
+    return {
+      created: createdProjectsCount,
+      updated: updatedProjectsCount,
+      events: importedEventsCount,
+      recognized,
+    };
   };
 
-  syncPayloadRef.current = syncProjectControlerPayload;
+  syncPayloadRef.current = async (raw: unknown) => {
+    await syncProjectControlerPayload(raw);
+  };
 
-  const handleImportProjectControlerFile = async (file: File) => {
-    try {
-      const text = await file.text();
-      const parsed: unknown = JSON.parse(text);
-      await syncProjectControlerPayload(parsed, { manual: true });
-    } catch {
+  const handleImportProjectControlerFile = async (
+    fileOrFiles: File | FileList | File[]
+  ) => {
+    const files: File[] =
+      fileOrFiles instanceof File ? [fileOrFiles] : Array.from(fileOrFiles);
+    if (files.length === 0) return;
+
+    let totalCreated = 0;
+    let totalUpdated = 0;
+    let totalEvents = 0;
+    let anyRecognized = false;
+    let parseErrors = 0;
+
+    for (const file of files) {
+      try {
+        const text = (await file.text()).replace(/^\uFEFF/, '');
+        const parsed: unknown = JSON.parse(text);
+        const res = await syncProjectControlerPayload(parsed, {
+          manual: true,
+          fallbackName: file.name,
+        });
+        totalCreated += res.created;
+        totalUpdated += res.updated;
+        totalEvents += res.events;
+        if (res.recognized) anyRecognized = true;
+      } catch {
+        parseErrors += 1;
+      }
+    }
+
+    if (parseErrors === files.length) {
       showNotice('Fichier JSON Project-Controler invalide ou illisible.');
+    } else if (!anyRecognized) {
+      showNotice(
+        'Format JSON non reconnu : utilisez un fichier exporté depuis Project-Controler.'
+      );
+    } else if (totalCreated === 0 && totalUpdated === 0 && totalEvents === 0) {
+      showNotice('Chantier déjà présent et à jour dans B.O.C.');
+    } else {
+      showNotice(
+        `Import Project-Controler : ${totalCreated} chantier(s) créé(s), ${totalUpdated} mis à jour, ${totalEvents} intempérie(s)/JC.`
+      );
     }
   };
 
@@ -1297,6 +1463,11 @@ export default function App() {
         </header>
 
         <main className="flex-1 px-3.5 sm:px-6 lg:px-8 pt-5 sm:py-6 pb-24 lg:pb-8 max-w-[1440px] w-full mx-auto">
+          {notice && (
+            <div className="md:hidden mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-xs font-semibold text-emerald-800">
+              {notice}
+            </div>
+          )}
           {liveAppId ? (
             <LiveAppEmbedView
               appId={liveAppId}

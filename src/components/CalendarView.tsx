@@ -44,7 +44,7 @@ interface CalendarViewProps {
   ) => Promise<void>;
   onDeleteEntry: (id: string) => Promise<void>;
   onChangeProjectColor: (projectId: string, color: string) => Promise<void>;
-  onImportProjectControlerFile: (file: File) => Promise<void>;
+  onImportProjectControlerFile: (files: File | FileList | File[]) => Promise<void>;
 }
 
 const WEEKDAYS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
@@ -258,9 +258,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    await onImportProjectControlerFile(file);
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    await onImportProjectControlerFile(files);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -351,6 +351,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           <input
             ref={fileInputRef}
             type="file"
+            multiple
             accept=".json,application/json"
             onChange={handleFileChange}
             className="hidden"
