@@ -8,6 +8,7 @@ import {
   NotebookPen,
   CheckSquare,
   GanttChartSquare,
+  Trash2,
 } from 'lucide-react';
 import { PROJECT_COLOR_PALETTE } from '../data/initialData';
 import {
@@ -32,6 +33,7 @@ interface OverviewViewProps {
   onUpsertProject: (
     project: Omit<Project, 'id'> & { id?: string }
   ) => Promise<void>;
+  onDeleteProject: (projectId: string) => Promise<void>;
   onImportProjectControlerFile: (file: File) => Promise<void>;
 }
 
@@ -46,11 +48,14 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
   onOpenLiveApp,
   onChangeProjectColor,
   onUpsertProject,
+  onDeleteProject,
   onImportProjectControlerFile,
 }) => {
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [editingColorFor, setEditingColorFor] = useState<string | null>(null);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
@@ -64,6 +69,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
   const [estimatedEndDate, setEstimatedEndDate] = useState('2027-02-28');
 
   const syncFileRef = useRef<HTMLInputElement | null>(null);
+  const projectFormRef = useRef<HTMLFormElement | null>(null);
 
   const visibleProjects =
     selectedProjectId === 'all'
@@ -81,6 +87,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
 
   const startNewProject = () => {
     setEditingProject(null);
+    setConfirmDelete(false);
     setCode('');
     setName('');
     setCommune('');
@@ -94,10 +101,14 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
     setStartDate(new Date().toISOString().slice(0, 10));
     setEstimatedEndDate('2027-03-31');
     setShowProjectForm(true);
+    setTimeout(() => {
+      projectFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 30);
   };
 
   const startEditProject = (proj: Project) => {
     setEditingProject(proj);
+    setConfirmDelete(false);
     setCode(proj.code);
     setName(proj.name);
     setCommune(proj.commune);
@@ -109,6 +120,9 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
     setStartDate(proj.startDate || '2026-09-01');
     setEstimatedEndDate(proj.estimatedEndDate || '2027-02-28');
     setShowProjectForm(true);
+    setTimeout(() => {
+      projectFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 30);
   };
 
   const handleSaveProject = async (e: React.FormEvent) => {
@@ -130,6 +144,20 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
     });
     setShowProjectForm(false);
     setEditingProject(null);
+    setConfirmDelete(false);
+  };
+
+  const handleConfirmDeleteProject = async () => {
+    if (!editingProject || deleting) return;
+    setDeleting(true);
+    try {
+      await onDeleteProject(editingProject.id);
+      setShowProjectForm(false);
+      setEditingProject(null);
+      setConfirmDelete(false);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const quickApps: {
@@ -459,6 +487,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
 
         {showProjectForm && (
           <form
+            ref={projectFormRef}
             onSubmit={handleSaveProject}
             className="p-5 bg-slate-50 border-b border-slate-200 space-y-4"
           >
@@ -582,25 +611,64 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-medium text-slate-600">
-                  Couleur chantier :
-                </span>
-                {PROJECT_COLOR_PALETTE.map((sw) => (
-                  <button
-                    key={sw.hex}
-                    type="button"
-                    onClick={() => setColor(sw.hex)}
-                    title={sw.label}
-                    className={`w-6 h-6 rounded border ${
-                      color === sw.hex
-                        ? 'border-slate-900 scale-110'
-                        : 'border-slate-200'
-                    }`}
-                    style={{ backgroundColor: sw.hex }}
-                  />
-                ))}
+            <div className="flex flex-wrap items-center justify-between gap-4 pt-2 border-t border-slate-200/80">
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-slate-600">
+                    Couleur chantier :
+                  </span>
+                  {PROJECT_COLOR_PALETTE.map((sw) => (
+                    <button
+                      key={sw.hex}
+                      type="button"
+                      onClick={() => setColor(sw.hex)}
+                      title={sw.label}
+                      className={`w-6 h-6 rounded border ${
+                        color === sw.hex
+                          ? 'border-slate-900 scale-110'
+                          : 'border-slate-200'
+                      }`}
+                      style={{ backgroundColor: sw.hex }}
+                    />
+                  ))}
+                </div>
+
+                {editingProject && (
+                  <div className="flex items-center gap-2">
+                    {!confirmDelete ? (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDelete(true)}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-red-200 bg-white text-xs font-medium text-red-700 hover:bg-red-50 transition-colors whitespace-nowrap"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Supprimer ce chantier</span>
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5">
+                        <span className="text-xs font-medium text-red-800 whitespace-nowrap">
+                          Retirer du suivi ?
+                        </span>
+                        <button
+                          type="button"
+                          disabled={deleting}
+                          onClick={handleConfirmDeleteProject}
+                          className="px-2.5 py-1 rounded-md bg-red-600 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-60 transition-colors whitespace-nowrap"
+                        >
+                          {deleting ? 'Suppression...' : 'Confirmer'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={deleting}
+                          onClick={() => setConfirmDelete(false)}
+                          className="px-2 py-1 rounded-md bg-white border border-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50 whitespace-nowrap"
+                        >
+                          Non
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center gap-2">
@@ -609,6 +677,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                   onClick={() => {
                     setShowProjectForm(false);
                     setEditingProject(null);
+                    setConfirmDelete(false);
                   }}
                   className="px-4 py-2 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:bg-slate-50"
                 >
@@ -616,7 +685,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-lg bg-blue-700 text-xs font-medium text-white hover:bg-blue-800"
+                  className="px-4 py-2 rounded-lg bg-gradient-to-r from-blue-700 to-sky-600 text-xs font-semibold text-white hover:from-blue-800 hover:to-sky-700 shadow-xs"
                 >
                   Enregistrer
                 </button>

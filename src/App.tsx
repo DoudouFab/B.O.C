@@ -621,6 +621,19 @@ export default function App() {
     }
   };
 
+  const handleDeleteProject = async (projectId: string) => {
+    const path = `controllers/${uid}/projects/${projectId}`;
+    try {
+      await deleteDoc(doc(db, 'controllers', uid, 'projects', projectId));
+      if (selectedProjectId === projectId) {
+        setSelectedProjectId('all');
+      }
+      showNotice('Chantier retiré du suivi.');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, path);
+    }
+  };
+
   const handleAddAnnotation = async (entry: {
     projectId: string;
     date: string;
@@ -1313,6 +1326,7 @@ export default function App() {
                   onOpenLiveApp={(appId) => setLiveAppId(appId)}
                   onChangeProjectColor={handleChangeProjectColor}
                   onUpsertProject={handleUpsertProject}
+                  onDeleteProject={handleDeleteProject}
                   onImportProjectControlerFile={handleImportProjectControlerFile}
                 />
               )}
