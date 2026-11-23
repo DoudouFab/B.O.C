@@ -14,6 +14,7 @@ export interface ControllerProfile {
   inasepUrl: string;
   sitesnapUrl: string;
   linksLocked: boolean;
+  calendarInviteEmails: string[];
 }
 
 export interface Project {
@@ -28,7 +29,8 @@ export interface Project {
   eaEnCoursCoche: boolean;
   delaiRestantJours: number;
   startDate: string; // YYYY-MM-DD
-  estimatedEndDate: string; // YYYY-MM-DD
+  contractualEndDate: string; // YYYY-MM-DD (fin de délai selon Project-Controler / JC)
+  estimatedEndDate: string; // YYYY-MM-DD (fin estimée par le contrôleur)
 }
 
 export type TodoPriority = 'Haute' | 'Normale' | 'Basse';
@@ -53,8 +55,9 @@ export interface CalendarEntry {
   date: string; // YYYY-MM-DD
   title: string;
   details: string;
-  startTime: string; // HH:MM
+  startTime: string; // HH:MM (empty string for all-day entries)
   durationMinutes: number;
+  allDay?: boolean;
   location: string;
   entryType: CalendarEntryType;
   source: CalendarSource;

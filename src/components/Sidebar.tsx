@@ -5,7 +5,7 @@ import {
   CheckSquare,
   Calendar,
   NotebookPen,
-  Link2,
+  Settings,
   Download,
   LogOut,
   X,
@@ -61,13 +61,19 @@ const NAV_ITEMS: {
     icon: NotebookPen,
     accentClass: 'text-amber-300',
   },
-  {
-    id: 'connector',
-    label: 'Liens & Compte',
-    icon: Link2,
-    accentClass: 'text-slate-300',
-  },
 ];
+
+const SETTINGS_NAV_ITEM: {
+  id: ModuleTab;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  accentClass: string;
+} = {
+  id: 'connector',
+  label: 'Paramètres',
+  icon: Settings,
+  accentClass: 'text-slate-200',
+};
 
 const getInitials = (name: string): string => {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -93,12 +99,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
       ? null
       : projects.find((p) => p.id === selectedProjectId) ?? null;
 
+  const SettingsIcon = SETTINGS_NAV_ITEM.icon;
+  const isSettingsActive = activeTab === SETTINGS_NAV_ITEM.id;
+
   const content = (
     <div className="flex h-full flex-col bg-gradient-to-b from-[#071430] via-[#0B1F4D] to-[#08173A] text-slate-100 border-r border-blue-950/80 w-68 shrink-0 select-none">
       {/* Brand Header */}
       <div className="flex items-center justify-between px-4 py-4 border-b border-white/10">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-11 h-11 rounded-xl overflow-hidden ring-2 ring-cyan-400/45 shadow-lg shadow-blue-950/60 bg-[#052BB8] shrink-0">
+        <button
+          type="button"
+          onClick={() => {
+            onSelectTab('overview');
+            onCloseMobile();
+          }}
+          title="Retour à l'accueil B.O.C"
+          className="group flex items-center gap-3 min-w-0 text-left rounded-xl p-1 -m-1 hover:bg-white/[0.07] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 transition-colors cursor-pointer"
+        >
+          <div className="w-11 h-11 rounded-xl overflow-hidden ring-2 ring-cyan-400/45 group-hover:ring-cyan-300 shadow-lg shadow-blue-950/60 bg-[#052BB8] shrink-0 transition-all">
             <img
               src="src/assets/images/boc_logo_emblem_flashy.png"
               alt="Logo B.O.C"
@@ -114,7 +131,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               Boîte à Outils · Contrôleur
             </span>
           </div>
-        </div>
+        </button>
         <button
           type="button"
           onClick={onCloseMobile}
@@ -167,39 +184,67 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Main Navigation */}
       <nav
-        className="flex-1 px-3 py-4 space-y-1.5 overflow-y-auto"
+        className="flex-1 px-3 py-4 flex flex-col justify-between gap-4 overflow-y-auto"
         aria-label="Navigation principale"
       >
-        {NAV_ITEMS.map((item) => {
-          const Icon = item.icon;
-          const isActive = activeTab === item.id;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => {
-                onSelectTab(item.id);
-                onCloseMobile();
-              }}
-              className={`group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all whitespace-nowrap text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 ${
-                isActive
-                  ? 'bg-gradient-to-r from-blue-600 via-blue-600 to-sky-500 text-white shadow-md shadow-blue-950/50 ring-1 ring-white/20'
-                  : 'text-slate-300 hover:bg-white/[0.08] hover:text-white'
-              }`}
-            >
-              <span
-                className={`p-1.5 rounded-lg transition-colors shrink-0 ${
+        <div className="space-y-1.5">
+          {NAV_ITEMS.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  onSelectTab(item.id);
+                  onCloseMobile();
+                }}
+                className={`group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all whitespace-nowrap text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 ${
                   isActive
-                    ? 'bg-white/20 text-white'
-                    : `bg-white/[0.06] ${item.accentClass} group-hover:bg-white/12 group-hover:text-white`
+                    ? 'bg-gradient-to-r from-blue-600 via-blue-600 to-sky-500 text-white shadow-md shadow-blue-950/50 ring-1 ring-white/20'
+                    : 'text-slate-300 hover:bg-white/[0.08] hover:text-white'
                 }`}
               >
-                <Icon className="w-4 h-4" />
-              </span>
-              <span className="truncate">{item.label}</span>
-            </button>
-          );
-        })}
+                <span
+                  className={`p-1.5 rounded-lg transition-colors shrink-0 ${
+                    isActive
+                      ? 'bg-white/20 text-white'
+                      : `bg-white/[0.06] ${item.accentClass} group-hover:bg-white/12 group-hover:text-white`
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                </span>
+                <span className="truncate">{item.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="pt-3 border-t border-white/10">
+          <button
+            type="button"
+            onClick={() => {
+              onSelectTab(SETTINGS_NAV_ITEM.id);
+              onCloseMobile();
+            }}
+            className={`group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all whitespace-nowrap text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 ${
+              isSettingsActive
+                ? 'bg-gradient-to-r from-blue-600 via-blue-600 to-sky-500 text-white shadow-md shadow-blue-950/50 ring-1 ring-white/20'
+                : 'text-slate-300 hover:bg-white/[0.08] hover:text-white'
+            }`}
+          >
+            <span
+              className={`p-1.5 rounded-lg transition-colors shrink-0 ${
+                isSettingsActive
+                  ? 'bg-white/20 text-white'
+                  : `bg-white/[0.06] ${SETTINGS_NAV_ITEM.accentClass} group-hover:bg-white/12 group-hover:text-white`
+              }`}
+            >
+              <SettingsIcon className="w-4 h-4" />
+            </span>
+            <span className="truncate">{SETTINGS_NAV_ITEM.label}</span>
+          </button>
+        </div>
       </nav>
 
       {/* Controller Footer Card */}

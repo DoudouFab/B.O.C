@@ -12,6 +12,7 @@
         "inasepUrl": { "type": "string", "maxLength": 500 },
         "sitesnapUrl": { "type": "string", "maxLength": 500 },
         "linksLocked": { "type": "boolean" },
+        "calendarInviteEmails": { "type": "array", "description": "0 à 3 adresses e-mail (Gmail/Outlook) pour les invitations rendez-vous." },
         "boundAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
@@ -33,6 +34,7 @@
         "eaEnCoursCoche": { "type": "boolean" },
         "delaiRestantJours": { "type": "number" },
         "startDate": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "maxLength": 10 },
+        "contractualEndDate": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "maxLength": 10 },
         "estimatedEndDate": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "maxLength": 10 },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
@@ -81,6 +83,7 @@
         "details": { "type": "string", "maxLength": 600 },
         "startTime": { "type": "string", "maxLength": 5 },
         "durationMinutes": { "type": "number" },
+        "allDay": { "type": "boolean" },
         "location": { "type": "string", "maxLength": 160 },
         "entryType": { "type": "string", "enum": ["Annotation", "Intempérie", "JC"] },
         "source": { "type": "string", "enum": ["boc", "project-controler"] },

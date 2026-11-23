@@ -6,6 +6,7 @@ import {
   LayoutGrid,
   Menu,
   NotebookPen,
+  Settings,
 } from 'lucide-react';
 import { onAuthStateChanged, signOut, User } from 'firebase/auth';
 import {
@@ -13,6 +14,7 @@ import {
   deleteDoc,
   doc,
   getDoc,
+  getDocs,
   onSnapshot,
   query,
   serverTimestamp,
@@ -70,7 +72,7 @@ const TAB_LABELS: Record<ModuleTab, string> = {
   todo: 'To-Do Liste',
   calendar: 'Calendrier',
   notes: 'Prise de notes',
-  connector: 'Liens & Compte',
+  connector: 'Paramètres',
 };
 
 const safeDateStr = (val: unknown, fallback: string): string => {
@@ -78,6 +80,20 @@ const safeDateStr = (val: unknown, fallback: string): string => {
     return val;
   }
   return fallback;
+};
+
+const toLocalIso = (d: Date): string => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+const addDaysFromToday = (days: number): string => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + Math.max(0, Math.round(days)));
+  return toLocalIso(d);
 };
 
 const safeHexColor = (val: unknown, fallback: string): string => {
@@ -106,6 +122,7 @@ export default function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const syncPayloadRef = useRef<(raw: unknown) => Promise<void>>(async () => {});
+  const syncLockRef = useRef<Promise<void>>(Promise.resolve());
   const liveIframeRef = useRef<HTMLIFrameElement | null>(null);
 
   const showNotice = (msg: string) => {
@@ -153,6 +170,7 @@ export default function App() {
             inasepUrl: PERMANENT_URLS.inasep,
             sitesnapUrl: PERMANENT_URLS.sitesnap,
             linksLocked: true,
+            calendarInviteEmails: [],
             boundAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           });
@@ -171,6 +189,7 @@ export default function App() {
                 eaEnCoursCoche: p.eaEnCoursCoche,
                 delaiRestantJours: p.delaiRestantJours,
                 startDate: p.startDate,
+                contractualEndDate: p.contractualEndDate,
                 estimatedEndDate: p.estimatedEndDate,
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
@@ -200,8 +219,9 @@ export default function App() {
               date: ev.date,
               title: ev.title,
               details: ev.details,
-              startTime: ev.startTime,
+              startTime: ev.allDay ? '' : ev.startTime,
               durationMinutes: ev.durationMinutes,
+              allDay: Boolean(ev.allDay),
               location: ev.location,
               entryType: ev.entryType,
               source: ev.source,
@@ -258,6 +278,12 @@ export default function App() {
             }).catch(() => {});
           }
 
+          const inviteEmails = Array.isArray(d.calendarInviteEmails)
+            ? d.calendarInviteEmails
+                .filter((em): em is string => typeof em === 'string' && em.trim().length >= 3)
+                .slice(0, 3)
+            : [];
+
           setController({
             uid: d.uid,
             email: d.email,
@@ -266,6 +292,7 @@ export default function App() {
             inasepUrl: resolvedInasepUrl,
             sitesnapUrl: d.sitesnapUrl || PERMANENT_URLS.sitesnap,
             linksLocked: Boolean(d.linksLocked),
+            calendarInviteEmails: inviteEmails,
           });
         }
       },
@@ -279,23 +306,30 @@ export default function App() {
       ),
       (snap) => {
         setProjects(
-          snap.docs.map((d) => ({
-            id: d.id,
-            code: d.data().code,
-            name: d.data().name,
-            commune: d.data().commune,
-            color: safeHexColor(d.data().color, PROJECT_COLOR_PALETTE[0].hex),
-            marcheTotalReviseEur: Number(d.data().marcheTotalReviseEur) || 0,
-            cumulEaValidesEur: Number(d.data().cumulEaValidesEur) || 0,
-            eaEnCoursEur: Number(d.data().eaEnCoursEur) || 0,
-            eaEnCoursCoche: Boolean(d.data().eaEnCoursCoche),
-            delaiRestantJours: Number(d.data().delaiRestantJours) || 0,
-            startDate: safeDateStr(d.data().startDate, '2026-09-01'),
-            estimatedEndDate: safeDateStr(
-              d.data().estimatedEndDate,
-              '2027-02-28'
-            ),
-          }))
+          snap.docs.map((d) => {
+            const delaiRestant = Number(d.data().delaiRestantJours) || 0;
+            const estEnd = safeDateStr(d.data().estimatedEndDate, '2027-02-28');
+            const fallbackContractual =
+              delaiRestant > 0 ? addDaysFromToday(delaiRestant) : estEnd;
+            return {
+              id: d.id,
+              code: d.data().code,
+              name: d.data().name,
+              commune: d.data().commune,
+              color: safeHexColor(d.data().color, PROJECT_COLOR_PALETTE[0].hex),
+              marcheTotalReviseEur: Number(d.data().marcheTotalReviseEur) || 0,
+              cumulEaValidesEur: Number(d.data().cumulEaValidesEur) || 0,
+              eaEnCoursEur: Number(d.data().eaEnCoursEur) || 0,
+              eaEnCoursCoche: Boolean(d.data().eaEnCoursCoche),
+              delaiRestantJours: delaiRestant,
+              startDate: safeDateStr(d.data().startDate, '2026-09-01'),
+              contractualEndDate: safeDateStr(
+                d.data().contractualEndDate,
+                fallbackContractual
+              ),
+              estimatedEndDate: estEnd,
+            };
+          })
         );
       },
       (error) =>
@@ -336,21 +370,32 @@ export default function App() {
       (snap) => {
         setCalendarEntries(
           snap.docs
-            .map((d) => ({
-              id: d.id,
-              projectId: d.data().projectId,
-              date: d.data().date,
-              title: d.data().title,
-              details: d.data().details || '',
-              startTime: d.data().startTime || '09:00',
-              durationMinutes:
-                typeof d.data().durationMinutes === 'number'
+            .map((d) => {
+              const entryType = d.data().entryType;
+              const source = d.data().source;
+              const isAllDay =
+                Boolean(d.data().allDay) ||
+                source === 'project-controler' ||
+                entryType === 'Intempérie' ||
+                entryType === 'JC';
+              return {
+                id: d.id,
+                projectId: d.data().projectId,
+                date: d.data().date,
+                title: d.data().title,
+                details: d.data().details || '',
+                startTime: isAllDay ? '' : d.data().startTime || '09:00',
+                durationMinutes: isAllDay
+                  ? 480
+                  : typeof d.data().durationMinutes === 'number'
                   ? d.data().durationMinutes
                   : 60,
-              location: d.data().location || '',
-              entryType: d.data().entryType,
-              source: d.data().source,
-            }))
+                allDay: isAllDay,
+                location: d.data().location || '',
+                entryType,
+                source,
+              };
+            })
             .sort((a, b) => a.date.localeCompare(b.date))
         );
       },
@@ -577,6 +622,10 @@ export default function App() {
     const path = `controllers/${uid}/projects/${id}`;
     const start = safeDateStr(proj.startDate, '2026-09-01');
     const end = safeDateStr(proj.estimatedEndDate, '2027-02-28');
+    const contractualEnd = safeDateStr(
+      proj.contractualEndDate,
+      proj.delaiRestantJours > 0 ? addDaysFromToday(proj.delaiRestantJours) : end
+    );
     try {
       if (isExisting) {
         await updateDoc(doc(db, 'controllers', uid, 'projects', id), {
@@ -590,6 +639,7 @@ export default function App() {
           eaEnCoursCoche: proj.eaEnCoursCoche,
           delaiRestantJours: proj.delaiRestantJours,
           startDate: start,
+          contractualEndDate: contractualEnd,
           estimatedEndDate: end,
           updatedAt: serverTimestamp(),
         });
@@ -607,6 +657,7 @@ export default function App() {
           eaEnCoursCoche: proj.eaEnCoursCoche,
           delaiRestantJours: proj.delaiRestantJours,
           startDate: start,
+          contractualEndDate: contractualEnd,
           estimatedEndDate: end,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
@@ -768,6 +819,8 @@ export default function App() {
       delais?: {
         os?: string;
         base?: number;
+        jcRestants?: number;
+        joursRestants?: number;
         finCalendrier?: string;
         joursMarques?: Record<string, string>;
         observationsOverrides?: Record<string, string>;
@@ -803,6 +856,42 @@ export default function App() {
     let importedEventsCount = 0;
     let recognized = false;
     const knownProjects: Project[] = [...projects];
+
+    // Lecture fraîche Firestore pour éviter tout doublon lors d'imports successifs rapides
+    const existingCalSnap = await getDocs(
+      query(
+        collection(db, 'controllers', uid, 'calendarEntries'),
+        where('ownerUid', '==', uid)
+      )
+    );
+    type ExistingPcCalDoc = {
+      id: string;
+      projectId: string;
+      date: string;
+      title: string;
+      details: string;
+      startTime: string;
+      durationMinutes: number;
+      allDay: boolean;
+      location: string;
+      entryType: string;
+      source: string;
+    };
+    const pcCalendarDocs: ExistingPcCalDoc[] = existingCalSnap.docs
+      .map((d) => ({
+        id: d.id,
+        projectId: String(d.data().projectId || ''),
+        date: String(d.data().date || ''),
+        title: String(d.data().title || ''),
+        details: String(d.data().details || ''),
+        startTime: String(d.data().startTime || ''),
+        durationMinutes: Number(d.data().durationMinutes ?? 480),
+        allDay: Boolean(d.data().allDay),
+        location: String(d.data().location || ''),
+        entryType: String(d.data().entryType || ''),
+        source: String(d.data().source || ''),
+      }))
+      .filter((d) => d.source === 'project-controler');
 
     const upsertPcDossier = async (d: PcProjectData) => {
       recognized = true;
@@ -899,24 +988,45 @@ export default function App() {
         d.delais?.os,
         existingMatch?.startDate ?? '2026-09-01'
       );
-      const estimatedEndDate = normalizeDateStr(
+
+      const explicitFinCalendrier = normalizeDateStr(
         d.delais?.finCalendrier,
-        existingMatch?.estimatedEndDate ?? '2027-02-28'
+        ''
       );
+      const jcFromPc =
+        typeof d.delais?.jcRestants === 'number'
+          ? d.delais.jcRestants
+          : typeof d.delais?.joursRestants === 'number'
+          ? d.delais.joursRestants
+          : typeof d.delais?.base === 'number'
+          ? d.delais.base
+          : null;
+
+      const contractualEndDate =
+        explicitFinCalendrier ||
+        (jcFromPc !== null && jcFromPc > 0
+          ? addDaysFromToday(jcFromPc)
+          : existingMatch?.contractualEndDate ??
+            existingMatch?.estimatedEndDate ??
+            '2027-02-28');
 
       const delaiRestantJours =
-        /^\d{4}-\d{2}-\d{2}$/.test(estimatedEndDate) && d.delais?.finCalendrier
+        jcFromPc !== null && jcFromPc >= 0
+          ? Math.round(jcFromPc)
+          : /^\d{4}-\d{2}-\d{2}$/.test(contractualEndDate)
           ? Math.max(
               0,
               Math.ceil(
-                (new Date(estimatedEndDate).getTime() - Date.now()) /
+                (new Date(contractualEndDate).getTime() - Date.now()) /
                   (1000 * 60 * 60 * 24)
               )
             )
-          : Math.max(
-              0,
-              Number(d.delais?.base ?? existingMatch?.delaiRestantJours ?? 0)
-            );
+          : existingMatch?.delaiRestantJours ?? 0;
+
+      // Préserver la fin estimée personnalisée du contrôleur si le chantier existe déjà
+      const estimatedEndDate = existingMatch?.estimatedEndDate
+        ? existingMatch.estimatedEndDate
+        : contractualEndDate;
 
       const nextProjectData: Project = {
         id: targetProjId,
@@ -942,6 +1052,7 @@ export default function App() {
           eaEnCoursEur > 0 || (existingMatch?.eaEnCoursCoche ?? true),
         delaiRestantJours,
         startDate,
+        contractualEndDate,
         estimatedEndDate,
       };
 
@@ -955,6 +1066,7 @@ export default function App() {
         existingMatch.eaEnCoursEur !== nextProjectData.eaEnCoursEur ||
         existingMatch.delaiRestantJours !== nextProjectData.delaiRestantJours ||
         existingMatch.startDate !== nextProjectData.startDate ||
+        existingMatch.contractualEndDate !== nextProjectData.contractualEndDate ||
         existingMatch.estimatedEndDate !== nextProjectData.estimatedEndDate;
 
       if (!existingMatch) {
@@ -966,59 +1078,138 @@ export default function App() {
         updatedProjectsCount += 1;
       }
 
-      const joursMarques = d.delais?.joursMarques ?? {};
-      const overrides = d.delais?.observationsOverrides ?? {};
-      for (const [dateStr, kind] of Object.entries(joursMarques)) {
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) continue;
-        if (kind !== 'intemperie' && kind !== 'ferie' && kind !== 'conge') continue;
+      if (d.delais) {
+        const joursMarques = d.delais.joursMarques ?? {};
+        const overrides = d.delais.observationsOverrides ?? {};
 
-        const entryType = kind === 'intemperie' ? 'Intempérie' : 'JC';
-        const title = (
-          overrides[dateStr] ||
-          (entryType === 'Intempérie'
+        // Construire la table dédupliquée des jours marqués du dossier Project-Controler le plus récent
+        const desiredByDate = new Map<
+          string,
+          { entryType: 'Intempérie' | 'JC'; title: string; details: string; location: string }
+        >();
+
+        for (const [rawDateKey, rawKind] of Object.entries(joursMarques)) {
+          const dateStr = normalizeDateStr(rawDateKey, '');
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) continue;
+          const kind = String(rawKind || '').trim().toLowerCase();
+          const isIntemperie = kind === 'intemperie' || kind === 'intempérie';
+          const isJcKind =
+            kind === 'ferie' ||
+            kind === 'férié' ||
+            kind === 'conge' ||
+            kind === 'congé' ||
+            kind === 'jc' ||
+            kind === 'jour_chome' ||
+            kind === 'repos';
+          if (!isIntemperie && !isJcKind) continue;
+
+          const entryType: 'Intempérie' | 'JC' = isIntemperie ? 'Intempérie' : 'JC';
+          const defaultLabel = isIntemperie
             ? `Intempérie · ${commune}`
-            : `Jour chômé (JC) · ${commune}`)
-        ).slice(0, 200);
+            : kind === 'conge' || kind === 'congé'
+            ? `Jour de congé · ${commune}`
+            : kind === 'ferie' || kind === 'férié'
+            ? `Jour férié · ${commune}`
+            : `Jour chômé (JC) · ${commune}`;
 
-        const existingEv = calendarEntries.find(
-          (e) =>
-            e.date === dateStr &&
-            e.source === 'project-controler' &&
-            e.projectId === targetProjId
+          const title = (
+            overrides[rawDateKey] ||
+            overrides[dateStr] ||
+            defaultLabel
+          ).slice(0, 200);
+
+          desiredByDate.set(dateStr, {
+            entryType,
+            title,
+            details: 'Info journée entière · Synchronisé depuis Project-Controler.',
+            location: commune.slice(0, 160),
+          });
+        }
+
+        // Récupérer toutes les entrées Project-Controler existantes pour ce chantier et remplacer sans doublon
+        const currentForProject = pcCalendarDocs.filter(
+          (e) => e.projectId === targetProjId
         );
 
-        if (existingEv) {
-          if (
-            existingEv.title !== title ||
-            existingEv.location !== commune.slice(0, 160)
-          ) {
-            await updateDoc(
-              doc(db, 'controllers', uid, 'calendarEntries', existingEv.id),
-              {
-                title,
-                location: commune.slice(0, 160),
-                updatedAt: serverTimestamp(),
-              }
-            );
+        const toDeleteIds = new Set<string>();
+        for (const oldDoc of currentForProject) {
+          const canonicalId = `pc-${targetProjId}-${oldDoc.date}`.slice(0, 128);
+          const desired = desiredByDate.get(oldDoc.date);
+          if (!desired || oldDoc.id !== canonicalId || oldDoc.entryType !== desired.entryType) {
+            toDeleteIds.add(oldDoc.id);
+          }
+        }
+
+        for (const delId of toDeleteIds) {
+          await deleteDoc(doc(db, 'controllers', uid, 'calendarEntries', delId));
+          const idx = pcCalendarDocs.findIndex((x) => x.id === delId);
+          if (idx !== -1) pcCalendarDocs.splice(idx, 1);
+        }
+
+        for (const [dateStr, desired] of desiredByDate.entries()) {
+          const canonicalId = `pc-${targetProjId}-${dateStr}`.slice(0, 128);
+          const existingCanonical = pcCalendarDocs.find(
+            (e) => e.id === canonicalId && e.projectId === targetProjId
+          );
+
+          if (existingCanonical) {
+            if (
+              existingCanonical.title !== desired.title ||
+              existingCanonical.details !== desired.details ||
+              existingCanonical.location !== desired.location ||
+              !existingCanonical.allDay ||
+              existingCanonical.startTime !== ''
+            ) {
+              await updateDoc(
+                doc(db, 'controllers', uid, 'calendarEntries', canonicalId),
+                {
+                  title: desired.title,
+                  details: desired.details,
+                  startTime: '',
+                  durationMinutes: 480,
+                  allDay: true,
+                  location: desired.location,
+                  updatedAt: serverTimestamp(),
+                }
+              );
+              existingCanonical.title = desired.title;
+              existingCanonical.details = desired.details;
+              existingCanonical.location = desired.location;
+              existingCanonical.allDay = true;
+              existingCanonical.startTime = '';
+              importedEventsCount += 1;
+            }
+          } else {
+            await setDoc(doc(db, 'controllers', uid, 'calendarEntries', canonicalId), {
+              ownerUid: uid,
+              projectId: targetProjId,
+              date: dateStr,
+              title: desired.title,
+              details: desired.details,
+              startTime: '',
+              durationMinutes: 480,
+              allDay: true,
+              location: desired.location,
+              entryType: desired.entryType,
+              source: 'project-controler',
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            });
+            pcCalendarDocs.push({
+              id: canonicalId,
+              projectId: targetProjId,
+              date: dateStr,
+              title: desired.title,
+              details: desired.details,
+              startTime: '',
+              durationMinutes: 480,
+              allDay: true,
+              location: desired.location,
+              entryType: desired.entryType,
+              source: 'project-controler',
+            });
             importedEventsCount += 1;
           }
-        } else {
-          const evId = `pc-${dateStr}-${importedEventsCount}-${Date.now()}`;
-          await setDoc(doc(db, 'controllers', uid, 'calendarEntries', evId), {
-            ownerUid: uid,
-            projectId: targetProjId,
-            date: dateStr,
-            title,
-            details: 'Synchronisé depuis Project-Controler V2.',
-            startTime: '08:00',
-            durationMinutes: 240,
-            location: commune.slice(0, 160),
-            entryType,
-            source: 'project-controler',
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          });
-          importedEventsCount += 1;
         }
       }
     };
@@ -1124,6 +1315,14 @@ export default function App() {
             item.startDate,
             existingMatch?.startDate ?? '2026-09-01'
           ),
+          contractualEndDate: normalizeDateStr(
+            item.contractualEndDate,
+            existingMatch?.contractualEndDate ??
+              normalizeDateStr(
+                item.estimatedEndDate,
+                existingMatch?.estimatedEndDate ?? '2027-02-28'
+              )
+          ),
           estimatedEndDate: normalizeDateStr(
             item.estimatedEndDate,
             existingMatch?.estimatedEndDate ?? '2027-02-28'
@@ -1140,46 +1339,77 @@ export default function App() {
 
       const incomingEvents = parsed?.intemperies ?? [];
       for (const ev of incomingEvents) {
-        if (!ev.date || !/^\d{4}-\d{2}-\d{2}$/.test(ev.date)) continue;
+        const normDate = normalizeDateStr(ev.date, '');
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(normDate)) continue;
         const matchedProj = knownProjects.find(
           (p) => p.id === ev.projectId || p.code === ev.code
         );
         const targetProjId = matchedProj?.id ?? 'general';
-        const existingEv = calendarEntries.find(
-          (e) =>
-            e.date === ev.date &&
-            e.source === 'project-controler' &&
-            e.projectId === targetProjId
-        );
+        const entryType: 'Intempérie' | 'JC' = ev.type === 'JC' ? 'JC' : 'Intempérie';
         const title = (
           ev.title ||
           ev.motif ||
           'Intempérie Project-Controler'
         ).slice(0, 200);
+        const canonicalId = `pc-${targetProjId}-${normDate}`.slice(0, 128);
 
-        if (existingEv) {
+        const duplicates = pcCalendarDocs.filter(
+          (e) =>
+            e.projectId === targetProjId &&
+            e.date === normDate &&
+            (e.id !== canonicalId || e.entryType !== entryType)
+        );
+        for (const dup of duplicates) {
+          await deleteDoc(doc(db, 'controllers', uid, 'calendarEntries', dup.id));
+          const idx = pcCalendarDocs.findIndex((x) => x.id === dup.id);
+          if (idx !== -1) pcCalendarDocs.splice(idx, 1);
+        }
+
+        const existingCanonical = pcCalendarDocs.find(
+          (e) => e.id === canonicalId && e.projectId === targetProjId
+        );
+
+        if (existingCanonical) {
           await updateDoc(
-            doc(db, 'controllers', uid, 'calendarEntries', existingEv.id),
+            doc(db, 'controllers', uid, 'calendarEntries', canonicalId),
             {
               title,
+              startTime: '',
+              durationMinutes: 480,
+              allDay: true,
+              location: (matchedProj?.commune ?? '').slice(0, 160),
               updatedAt: serverTimestamp(),
             }
           );
+          existingCanonical.title = title;
         } else {
-          const id = `pc-${ev.date}-${importedEventsCount}-${Date.now()}`;
-          await setDoc(doc(db, 'controllers', uid, 'calendarEntries', id), {
+          await setDoc(doc(db, 'controllers', uid, 'calendarEntries', canonicalId), {
             ownerUid: uid,
             projectId: targetProjId,
-            date: ev.date,
+            date: normDate,
             title,
-            details: 'Synchronisé depuis Project-Controler.',
-            startTime: '08:00',
-            durationMinutes: 240,
-            location: matchedProj?.commune ?? '',
-            entryType: ev.type === 'JC' ? 'JC' : 'Intempérie',
+            details: 'Info journée entière · Synchronisé depuis Project-Controler.',
+            startTime: '',
+            durationMinutes: 480,
+            allDay: true,
+            location: (matchedProj?.commune ?? '').slice(0, 160),
+            entryType,
             source: 'project-controler',
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
+          });
+          pcCalendarDocs.push({
+            id: canonicalId,
+            projectId: targetProjId,
+            date: normDate,
+            title,
+            details: 'Info journée entière · Synchronisé depuis Project-Controler.',
+            startTime: '',
+            durationMinutes: 480,
+            allDay: true,
+            location: (matchedProj?.commune ?? '').slice(0, 160),
+            entryType,
+            source: 'project-controler',
           });
         }
         importedEventsCount += 1;
@@ -1203,8 +1433,17 @@ export default function App() {
     };
   };
 
+  const enqueueSync = <T,>(task: () => Promise<T>): Promise<T> => {
+    const next = syncLockRef.current.then(task, task);
+    syncLockRef.current = next.then(
+      () => undefined,
+      () => undefined
+    );
+    return next;
+  };
+
   syncPayloadRef.current = async (raw: unknown) => {
-    await syncProjectControlerPayload(raw);
+    await enqueueSync(() => syncProjectControlerPayload(raw));
   };
 
   const handleImportProjectControlerFile = async (
@@ -1214,42 +1453,44 @@ export default function App() {
       fileOrFiles instanceof File ? [fileOrFiles] : Array.from(fileOrFiles);
     if (files.length === 0) return;
 
-    let totalCreated = 0;
-    let totalUpdated = 0;
-    let totalEvents = 0;
-    let anyRecognized = false;
-    let parseErrors = 0;
+    await enqueueSync(async () => {
+      let totalCreated = 0;
+      let totalUpdated = 0;
+      let totalEvents = 0;
+      let anyRecognized = false;
+      let parseErrors = 0;
 
-    for (const file of files) {
-      try {
-        const text = (await file.text()).replace(/^\uFEFF/, '');
-        const parsed: unknown = JSON.parse(text);
-        const res = await syncProjectControlerPayload(parsed, {
-          manual: true,
-          fallbackName: file.name,
-        });
-        totalCreated += res.created;
-        totalUpdated += res.updated;
-        totalEvents += res.events;
-        if (res.recognized) anyRecognized = true;
-      } catch {
-        parseErrors += 1;
+      for (const file of files) {
+        try {
+          const text = (await file.text()).replace(/^\uFEFF/, '');
+          const parsed: unknown = JSON.parse(text);
+          const res = await syncProjectControlerPayload(parsed, {
+            manual: true,
+            fallbackName: file.name,
+          });
+          totalCreated += res.created;
+          totalUpdated += res.updated;
+          totalEvents += res.events;
+          if (res.recognized) anyRecognized = true;
+        } catch {
+          parseErrors += 1;
+        }
       }
-    }
 
-    if (parseErrors === files.length) {
-      showNotice('Fichier JSON Project-Controler invalide ou illisible.');
-    } else if (!anyRecognized) {
-      showNotice(
-        'Format JSON non reconnu : utilisez un fichier exporté depuis Project-Controler.'
-      );
-    } else if (totalCreated === 0 && totalUpdated === 0 && totalEvents === 0) {
-      showNotice('Chantier déjà présent et à jour dans B.O.C.');
-    } else {
-      showNotice(
-        `Import Project-Controler : ${totalCreated} chantier(s) créé(s), ${totalUpdated} mis à jour, ${totalEvents} intempérie(s)/JC.`
-      );
-    }
+      if (parseErrors === files.length) {
+        showNotice('Fichier JSON Project-Controler invalide ou illisible.');
+      } else if (!anyRecognized) {
+        showNotice(
+          'Format JSON non reconnu : utilisez un fichier exporté depuis Project-Controler.'
+        );
+      } else if (totalCreated === 0 && totalUpdated === 0 && totalEvents === 0) {
+        showNotice('Chantier déjà présent et à jour dans B.O.C.');
+      } else {
+        showNotice(
+          `Import Project-Controler : ${totalCreated} chantier(s) créé(s), ${totalUpdated} mis à jour, ${totalEvents} intempérie(s)/JC.`
+        );
+      }
+    });
   };
 
   const handleCreateNotebook = async (
@@ -1334,6 +1575,23 @@ export default function App() {
     }
   };
 
+  const handleSaveCalendarInviteEmails = async (emails: string[]) => {
+    const path = `controllers/${uid}`;
+    const cleaned = emails
+      .map((e) => e.trim())
+      .filter((e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e))
+      .slice(0, 3);
+    try {
+      await updateDoc(doc(db, 'controllers', uid), {
+        calendarInviteEmails: cleaned,
+        updatedAt: serverTimestamp(),
+      });
+      showNotice('Adresses e-mail d’invitation enregistrées.');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, path);
+    }
+  };
+
   const handleExportBackup = () => {
     const payload = {
       exportedAt: new Date().toISOString(),
@@ -1357,6 +1615,461 @@ export default function App() {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
     showNotice('Sauvegarde JSON téléchargée.');
+  };
+
+  const handleRestoreBackup = async (
+    file: File
+  ): Promise<{ ok: boolean; message: string }> => {
+    return enqueueSync(async () => {
+      let parsed: unknown;
+      try {
+        const text = (await file.text()).replace(/^\uFEFF/, '');
+        parsed = JSON.parse(text);
+      } catch {
+        return {
+          ok: false,
+          message: 'Fichier JSON invalide ou illisible.',
+        };
+      }
+
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return {
+          ok: false,
+          message: 'Format de fichier non reconnu pour une sauvegarde B.O.C.',
+        };
+      }
+
+      const data = parsed as Record<string, unknown>;
+      const looksLikeProjectControler =
+        'nomProjet' in data ||
+        'infosAdministratives' in data ||
+        'marche3P' in data ||
+        'delais' in data;
+
+      const hasBocCollections =
+        Array.isArray(data.projects) ||
+        Array.isArray(data.todos) ||
+        Array.isArray(data.calendarEntries) ||
+        Array.isArray(data.notebooks);
+
+      if (!hasBocCollections) {
+        return {
+          ok: false,
+          message: looksLikeProjectControler
+            ? 'Ce fichier provient de Project-Controler : utilisez « Importer / Sync (.JSON) » sur l’Accueil ou le Calendrier.'
+            : 'Sauvegarde B.O.C non reconnue : utilisez un fichier boc_*.json exporté depuis B.O.C.',
+        };
+      }
+
+      const sanitizeId = (rawId: unknown, prefix: string, idx: number): string => {
+        if (typeof rawId === 'string') {
+          const cleaned = rawId
+            .trim()
+            .replace(/[^a-zA-Z0-9_-]/g, '-')
+            .slice(0, 128);
+          if (cleaned.length >= 1) return cleaned;
+        }
+        return `${prefix}-${Date.now()}-${idx}`.slice(0, 128);
+      };
+
+      const rawProjects = Array.isArray(data.projects) ? data.projects : [];
+      const rawTodos = Array.isArray(data.todos) ? data.todos : [];
+      const rawCal = Array.isArray(data.calendarEntries)
+        ? data.calendarEntries
+        : [];
+      const rawNotes = Array.isArray(data.notebooks) ? data.notebooks : [];
+
+      const [projSnap, todoSnap, calSnap, noteSnap] = await Promise.all([
+        getDocs(
+          query(
+            collection(db, 'controllers', uid, 'projects'),
+            where('ownerUid', '==', uid)
+          )
+        ),
+        getDocs(
+          query(
+            collection(db, 'controllers', uid, 'todos'),
+            where('ownerUid', '==', uid)
+          )
+        ),
+        getDocs(
+          query(
+            collection(db, 'controllers', uid, 'calendarEntries'),
+            where('ownerUid', '==', uid)
+          )
+        ),
+        getDocs(
+          query(
+            collection(db, 'controllers', uid, 'notebooks'),
+            where('ownerUid', '==', uid)
+          )
+        ),
+      ]);
+
+      const existingProjectIds = new Set(projSnap.docs.map((d) => d.id));
+      const existingTodoIds = new Set(todoSnap.docs.map((d) => d.id));
+      const existingCalMeta = new Map(
+        calSnap.docs.map((d) => [
+          d.id,
+          {
+            entryType: String(d.data().entryType || ''),
+            source: String(d.data().source || ''),
+          },
+        ])
+      );
+      const existingNoteIds = new Set(noteSnap.docs.map((d) => d.id));
+
+      const projectIdMap = new Map<string, string>();
+      const validProjectIds = new Set<string>(existingProjectIds);
+
+      type BatchAction = (batch: ReturnType<typeof writeBatch>) => void;
+      const runBatched = async (actions: BatchAction[]) => {
+        for (let i = 0; i < actions.length; i += 400) {
+          const batch = writeBatch(db);
+          actions.slice(i, i + 400).forEach((fn) => fn(batch));
+          await batch.commit();
+        }
+      };
+
+      let restoredProjects = 0;
+      const projectActions: BatchAction[] = [];
+
+      rawProjects.forEach((item, idx) => {
+        if (!item || typeof item !== 'object') return;
+        const p = item as Record<string, unknown>;
+        const origId = typeof p.id === 'string' ? p.id : '';
+        const id = sanitizeId(origId, 'proj', idx);
+        if (origId) projectIdMap.set(origId, id);
+        validProjectIds.add(id);
+
+        const code = (
+          typeof p.code === 'string' && p.code.trim() ? p.code.trim() : 'CHANTIER'
+        ).slice(0, 64);
+        const name = (
+          typeof p.name === 'string' && p.name.trim() ? p.name.trim() : code
+        ).slice(0, 180);
+        const commune = (
+          typeof p.commune === 'string' && p.commune.trim()
+            ? p.commune.trim()
+            : 'Chantier'
+        ).slice(0, 100);
+        const color = safeHexColor(p.color, PROJECT_COLOR_PALETTE[0].hex);
+        const marcheTotalReviseEur = Math.max(
+          0,
+          Number(p.marcheTotalReviseEur) || 0
+        );
+        const cumulEaValidesEur = Math.max(
+          0,
+          Number(p.cumulEaValidesEur) || 0
+        );
+        const eaEnCoursEur = Math.max(0, Number(p.eaEnCoursEur) || 0);
+        const eaEnCoursCoche =
+          typeof p.eaEnCoursCoche === 'boolean' ? p.eaEnCoursCoche : true;
+        const delaiRestantJours = Math.max(
+          0,
+          Math.round(Number(p.delaiRestantJours) || 0)
+        );
+        const startDate = safeDateStr(p.startDate, '2026-09-01');
+        const estimatedEndDate = safeDateStr(p.estimatedEndDate, '2027-02-28');
+        const contractualEndDate = safeDateStr(
+          p.contractualEndDate,
+          delaiRestantJours > 0
+            ? addDaysFromToday(delaiRestantJours)
+            : estimatedEndDate
+        );
+
+        const ref = doc(db, 'controllers', uid, 'projects', id);
+        if (existingProjectIds.has(id)) {
+          projectActions.push((batch) =>
+            batch.update(ref, {
+              code,
+              name,
+              commune,
+              color,
+              marcheTotalReviseEur,
+              cumulEaValidesEur,
+              eaEnCoursEur,
+              eaEnCoursCoche,
+              delaiRestantJours,
+              startDate,
+              contractualEndDate,
+              estimatedEndDate,
+              updatedAt: serverTimestamp(),
+            })
+          );
+        } else {
+          projectActions.push((batch) =>
+            batch.set(ref, {
+              ownerUid: uid,
+              code,
+              name,
+              commune,
+              color,
+              marcheTotalReviseEur,
+              cumulEaValidesEur,
+              eaEnCoursEur,
+              eaEnCoursCoche,
+              delaiRestantJours,
+              startDate,
+              contractualEndDate,
+              estimatedEndDate,
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            })
+          );
+        }
+        restoredProjects += 1;
+      });
+
+      try {
+        await runBatched(projectActions);
+      } catch (error) {
+        handleFirestoreError(
+          error,
+          OperationType.WRITE,
+          `controllers/${uid}/projects`
+        );
+      }
+
+      const resolveProjectRef = (rawProjId: unknown): string => {
+        if (typeof rawProjId === 'string') {
+          const mapped = projectIdMap.get(rawProjId) ?? rawProjId.trim();
+          if (mapped === 'general' || validProjectIds.has(mapped)) {
+            return mapped;
+          }
+        }
+        return 'general';
+      };
+
+      let restoredTodos = 0;
+      const todoActions: BatchAction[] = [];
+      rawTodos.forEach((item, idx) => {
+        if (!item || typeof item !== 'object') return;
+        const t = item as Record<string, unknown>;
+        const id = sanitizeId(t.id, 'todo', idx);
+        const title = (
+          typeof t.title === 'string' && t.title.trim() ? t.title.trim() : ''
+        ).slice(0, 240);
+        if (!title) return;
+        const details = (typeof t.details === 'string' ? t.details : '').slice(
+          0,
+          1000
+        );
+        const priority =
+          t.priority === 'Haute' ||
+          t.priority === 'Normale' ||
+          t.priority === 'Basse'
+            ? t.priority
+            : 'Normale';
+        const done = Boolean(t.done);
+        const dueDate = (typeof t.dueDate === 'string' ? t.dueDate : '').slice(
+          0,
+          20
+        );
+        const projectId = resolveProjectRef(t.projectId);
+        const ref = doc(db, 'controllers', uid, 'todos', id);
+        if (existingTodoIds.has(id)) {
+          todoActions.push((batch) =>
+            batch.update(ref, {
+              projectId,
+              title,
+              details,
+              priority,
+              done,
+              dueDate,
+              updatedAt: serverTimestamp(),
+            })
+          );
+        } else {
+          todoActions.push((batch) =>
+            batch.set(ref, {
+              ownerUid: uid,
+              projectId,
+              title,
+              details,
+              priority,
+              done,
+              dueDate,
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            })
+          );
+        }
+        restoredTodos += 1;
+      });
+
+      let restoredEvents = 0;
+      const calDeleteActions: BatchAction[] = [];
+      const calWriteActions: BatchAction[] = [];
+      rawCal.forEach((item, idx) => {
+        if (!item || typeof item !== 'object') return;
+        const ev = item as Record<string, unknown>;
+        const id = sanitizeId(ev.id, 'cal', idx);
+        const title = (
+          typeof ev.title === 'string' && ev.title.trim() ? ev.title.trim() : ''
+        ).slice(0, 200);
+        if (!title) return;
+        const date = safeDateStr(ev.date, toLocalIso(new Date()));
+        const details = (typeof ev.details === 'string' ? ev.details : '').slice(
+          0,
+          600
+        );
+        const entryType =
+          ev.entryType === 'Intempérie' ||
+          ev.entryType === 'JC' ||
+          ev.entryType === 'Annotation'
+            ? ev.entryType
+            : 'Annotation';
+        const source =
+          ev.source === 'project-controler' ? 'project-controler' : 'boc';
+        const allDay =
+          Boolean(ev.allDay) ||
+          source === 'project-controler' ||
+          entryType === 'Intempérie' ||
+          entryType === 'JC';
+        const startTime = allDay
+          ? ''
+          : (typeof ev.startTime === 'string' ? ev.startTime : '09:00').slice(
+              0,
+              5
+            );
+        const durationMinutes = allDay
+          ? 480
+          : Math.max(0, Math.min(1440, Number(ev.durationMinutes ?? 60)));
+        const location = (
+          typeof ev.location === 'string' ? ev.location : ''
+        ).slice(0, 160);
+        const projectId = resolveProjectRef(ev.projectId);
+
+        const ref = doc(db, 'controllers', uid, 'calendarEntries', id);
+        const prev = existingCalMeta.get(id);
+        if (prev && prev.entryType === entryType && prev.source === source) {
+          calWriteActions.push((batch) =>
+            batch.update(ref, {
+              projectId,
+              date,
+              title,
+              details,
+              startTime,
+              durationMinutes,
+              allDay,
+              location,
+              updatedAt: serverTimestamp(),
+            })
+          );
+        } else {
+          if (prev) {
+            calDeleteActions.push((batch) => batch.delete(ref));
+          }
+          calWriteActions.push((batch) =>
+            batch.set(ref, {
+              ownerUid: uid,
+              projectId,
+              date,
+              title,
+              details,
+              startTime,
+              durationMinutes,
+              allDay,
+              location,
+              entryType,
+              source,
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            })
+          );
+        }
+        restoredEvents += 1;
+      });
+
+      let restoredNotes = 0;
+      const noteActions: BatchAction[] = [];
+      rawNotes.forEach((item, idx) => {
+        if (!item || typeof item !== 'object') return;
+        const n = item as Record<string, unknown>;
+        const id = sanitizeId(n.id, 'note', idx);
+        const title = (
+          typeof n.title === 'string' && n.title.trim()
+            ? n.title.trim()
+            : 'Note restaurée'
+        ).slice(0, 180);
+        const content = (typeof n.content === 'string' ? n.content : '').slice(
+          0,
+          25000
+        );
+        const color = safeHexColor(n.color, POSTIT_COLOR_PALETTE[0].hex);
+        const pinned = Boolean(n.pinned);
+        const projectId = resolveProjectRef(n.projectId);
+        const ref = doc(db, 'controllers', uid, 'notebooks', id);
+        if (existingNoteIds.has(id)) {
+          noteActions.push((batch) =>
+            batch.update(ref, {
+              projectId,
+              title,
+              content,
+              color,
+              pinned,
+              updatedAt: serverTimestamp(),
+            })
+          );
+        } else {
+          noteActions.push((batch) =>
+            batch.set(ref, {
+              ownerUid: uid,
+              projectId,
+              title,
+              content,
+              color,
+              pinned,
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            })
+          );
+        }
+        restoredNotes += 1;
+      });
+
+      try {
+        if (calDeleteActions.length > 0) {
+          await runBatched(calDeleteActions);
+        }
+        await runBatched([...todoActions, ...calWriteActions, ...noteActions]);
+      } catch (error) {
+        handleFirestoreError(
+          error,
+          OperationType.WRITE,
+          `controllers/${uid}/restore`
+        );
+      }
+
+      const rawController =
+        data.controller && typeof data.controller === 'object'
+          ? (data.controller as Record<string, unknown>)
+          : null;
+      if (rawController && Array.isArray(rawController.calendarInviteEmails)) {
+        const cleanedEmails = rawController.calendarInviteEmails
+          .filter((em): em is string => typeof em === 'string')
+          .map((em) => em.trim())
+          .filter((em) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em))
+          .slice(0, 3);
+        try {
+          await updateDoc(doc(db, 'controllers', uid), {
+            calendarInviteEmails: cleanedEmails,
+            updatedAt: serverTimestamp(),
+          });
+        } catch (error) {
+          handleFirestoreError(
+            error,
+            OperationType.UPDATE,
+            `controllers/${uid}`
+          );
+        }
+      }
+
+      const summary = `Sauvegarde restaurée : ${restoredProjects} chantier(s), ${restoredTodos} tâche(s), ${restoredEvents} événement(s), ${restoredNotes} note(s).`;
+      showNotice('Sauvegarde B.O.C restaurée.');
+      return { ok: true, message: summary };
+    });
   };
 
   const handleSignOut = async () => {
@@ -1414,16 +2127,30 @@ export default function App() {
               <Menu className="w-5 h-5" />
             </button>
             <div className="flex items-center gap-2 text-sm min-w-0 truncate">
-              {activeProject && (
-                <span
-                  className="w-2.5 h-2.5 rounded-sm shrink-0"
-                  style={{ backgroundColor: activeProject.color }}
-                  aria-hidden="true"
+              <button
+                type="button"
+                onClick={() => {
+                  setLiveAppId(null);
+                  setActiveTab('overview');
+                }}
+                title="Retour à l'accueil B.O.C"
+                className="inline-flex items-center gap-1.5 font-medium text-slate-600 hover:text-blue-700 transition-colors whitespace-nowrap cursor-pointer rounded-lg px-1.5 py-1 -ml-1.5 hover:bg-slate-100"
+              >
+                <img
+                  src="src/assets/images/boc_logo_emblem_flashy.png"
+                  alt="Logo B.O.C"
+                  referrerPolicy="no-referrer"
+                  className="lg:hidden w-5 h-5 rounded-md object-cover shrink-0"
                 />
-              )}
-              <span className="font-medium text-slate-500 whitespace-nowrap">
-                {activeProject ? activeProject.code : 'B.O.C'}
-              </span>
+                {activeProject && (
+                  <span
+                    className="w-2.5 h-2.5 rounded-sm shrink-0"
+                    style={{ backgroundColor: activeProject.color }}
+                    aria-hidden="true"
+                  />
+                )}
+                <span>{activeProject ? activeProject.code : 'B.O.C'}</span>
+              </button>
               <span aria-hidden="true" className="text-slate-300">
                 /
               </span>
@@ -1450,20 +2177,27 @@ export default function App() {
                   activeTab === 'connector' ? 'overview' : 'connector'
                 );
               }}
-              className="px-3 sm:px-3.5 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 hover:text-slate-900 transition-colors whitespace-nowrap shrink-0"
+              className="inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 hover:text-slate-900 transition-colors whitespace-nowrap shrink-0"
             >
+              <Settings className="w-3.5 h-3.5 text-slate-600 shrink-0" />
               <span className="hidden sm:inline">
-                {activeTab === 'connector' ? 'Retour Accueil' : 'Liens & Compte'}
+                {activeTab === 'connector' ? 'Retour Accueil' : 'Paramètres'}
               </span>
               <span className="sm:hidden">
-                {activeTab === 'connector' ? 'Accueil' : 'Compte'}
+                {activeTab === 'connector' ? 'Accueil' : 'Paramètres'}
               </span>
             </button>
           </div>
         </header>
 
-        <main className="flex-1 px-3.5 sm:px-6 lg:px-8 pt-5 sm:py-6 pb-24 lg:pb-8 max-w-[1440px] w-full mx-auto">
-          {notice && (
+        <main
+          className={
+            liveAppId
+              ? 'flex-1 min-w-0'
+              : 'flex-1 px-3.5 sm:px-6 lg:px-8 pt-5 sm:py-6 pb-24 lg:pb-8 max-w-[1440px] w-full mx-auto'
+          }
+        >
+          {notice && !liveAppId && (
             <div className="md:hidden mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-xs font-semibold text-emerald-800">
               {notice}
             </div>
@@ -1533,6 +2267,9 @@ export default function App() {
                   projectControlerUrl={
                     controller.inasepUrl || PERMANENT_URLS.inasep
                   }
+                  calendarInviteEmails={controller.calendarInviteEmails}
+                  controllerName={controller.displayName}
+                  controllerEmail={controller.email}
                   onAddAnnotation={handleAddAnnotation}
                   onUpdateEntry={handleUpdateCalendarEntry}
                   onDeleteEntry={handleDeleteCalendarEntry}
@@ -1556,47 +2293,52 @@ export default function App() {
                 <AppsConnectorView
                   controller={controller}
                   onLockLinks={handleLockLinks}
+                  onSaveCalendarInviteEmails={handleSaveCalendarInviteEmails}
+                  onExportBackup={handleExportBackup}
+                  onRestoreBackup={handleRestoreBackup}
                 />
               )}
             </>
           )}
         </main>
 
-        <nav
-          aria-label="Navigation mobile"
-          className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200/90 px-1.5 pt-1.5 pb-[max(0.45rem,env(safe-area-inset-bottom))] grid grid-cols-5 gap-1 shadow-[0_-4px_16px_rgba(15,23,42,0.06)]"
-        >
-          {(
-            [
-              { id: 'overview', label: 'Accueil', icon: LayoutGrid },
-              { id: 'planning', label: 'Planning', icon: GanttChartSquare },
-              { id: 'todo', label: 'To-Do', icon: CheckSquare },
-              { id: 'calendar', label: 'Calendrier', icon: Calendar },
-              { id: 'notes', label: 'Notes', icon: NotebookPen },
-            ] as const
-          ).map((item) => {
-            const Icon = item.icon;
-            const isActive = !liveAppId && activeTab === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => {
-                  setLiveAppId(null);
-                  setActiveTab(item.id);
-                }}
-                className={`flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-xl text-[11px] font-semibold transition-all ${
-                  isActive
-                    ? 'text-blue-700 bg-blue-50/90 shadow-2xs'
-                    : 'text-slate-500 hover:text-slate-900'
-                }`}
-              >
-                <Icon className="w-4 h-4 shrink-0" />
-                <span className="truncate max-w-full px-0.5">{item.label}</span>
-              </button>
-            );
-          })}
-        </nav>
+        {!liveAppId && (
+          <nav
+            aria-label="Navigation mobile"
+            className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200/90 px-1.5 pt-1.5 pb-[max(0.45rem,env(safe-area-inset-bottom))] grid grid-cols-5 gap-1 shadow-[0_-4px_16px_rgba(15,23,42,0.06)]"
+          >
+            {(
+              [
+                { id: 'overview', label: 'Accueil', icon: LayoutGrid },
+                { id: 'planning', label: 'Planning', icon: GanttChartSquare },
+                { id: 'todo', label: 'To-Do', icon: CheckSquare },
+                { id: 'calendar', label: 'Calendrier', icon: Calendar },
+                { id: 'notes', label: 'Notes', icon: NotebookPen },
+              ] as const
+            ).map((item) => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => {
+                    setLiveAppId(null);
+                    setActiveTab(item.id);
+                  }}
+                  className={`flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-xl text-[11px] font-semibold transition-all ${
+                    isActive
+                      ? 'text-blue-700 bg-blue-50/90 shadow-2xs'
+                      : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                >
+                  <Icon className="w-4 h-4 shrink-0" />
+                  <span className="truncate max-w-full px-0.5">{item.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+        )}
 
         <OfflineIndicator />
       </div>

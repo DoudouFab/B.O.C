@@ -66,6 +66,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
   const [eaEnCours, setEaEnCours] = useState('0');
   const [delaiRestant, setDelaiRestant] = useState('60');
   const [startDate, setStartDate] = useState('2026-10-01');
+  const [contractualEndDate, setContractualEndDate] = useState('2027-02-28');
   const [estimatedEndDate, setEstimatedEndDate] = useState('2027-02-28');
 
   const syncFileRef = useRef<HTMLInputElement | null>(null);
@@ -77,6 +78,14 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
       : projects.filter((p) => p.id === selectedProjectId);
 
   const openTodos = todos.filter((t) => !t.done);
+
+  // Uniquement les rendez-vous / annotations B.O.C sur l'accueil (pas les intempéries ni JC)
+  const recapCalendarEntries = calendarEntries.filter(
+    (ev) =>
+      ev.source !== 'project-controler' &&
+      ev.entryType !== 'Intempérie' &&
+      ev.entryType !== 'JC'
+  );
 
   const formatEur = (val: number) =>
     new Intl.NumberFormat('fr-BE', {
@@ -99,6 +108,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
     setEaEnCours('0');
     setDelaiRestant('60');
     setStartDate(new Date().toISOString().slice(0, 10));
+    setContractualEndDate('2027-03-31');
     setEstimatedEndDate('2027-03-31');
     setShowProjectForm(true);
     setTimeout(() => {
@@ -118,6 +128,9 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
     setEaEnCours(String(proj.eaEnCoursEur));
     setDelaiRestant(String(proj.delaiRestantJours));
     setStartDate(proj.startDate || '2026-09-01');
+    setContractualEndDate(
+      proj.contractualEndDate || proj.estimatedEndDate || '2027-02-28'
+    );
     setEstimatedEndDate(proj.estimatedEndDate || '2027-02-28');
     setShowProjectForm(true);
     setTimeout(() => {
@@ -140,6 +153,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
       eaEnCoursCoche: true,
       delaiRestantJours: Math.max(0, Number(delaiRestant) || 0),
       startDate,
+      contractualEndDate: contractualEndDate || estimatedEndDate,
       estimatedEndDate,
     });
     setShowProjectForm(false);
@@ -399,7 +413,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
             </button>
           </div>
           <div className="divide-y divide-slate-100 flex-1">
-            {calendarEntries.slice(0, 4).map((ev) => {
+            {recapCalendarEntries.slice(0, 4).map((ev) => {
               const proj = getProject(ev.projectId);
               return (
                 <div key={ev.id} className="px-5 py-3 space-y-1">
@@ -424,17 +438,15 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                     <span aria-hidden="true">·</span>
                     <span>
                       {ev.startTime ? `${ev.startTime} · ` : ''}
-                      {ev.source === 'project-controler'
-                        ? `${ev.entryType} (Project-Controler)`
-                        : 'Annotation'}
+                      Rendez-vous
                     </span>
                   </div>
                 </div>
               );
             })}
-            {calendarEntries.length === 0 && (
+            {recapCalendarEntries.length === 0 && (
               <div className="p-6 text-sm text-slate-500">
-                Aucun événement au calendrier.
+                Aucun rendez-vous à venir (les intempéries et JC sont visibles dans le Calendrier).
               </div>
             )}
           </div>
