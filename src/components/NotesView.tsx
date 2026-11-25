@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { POSTIT_COLOR_PALETTE } from '../data/initialData';
 import { NotebookItem, Project } from '../types';
+import { deriveLightPostItColors } from '../utils/colorUtils';
 
 interface NotesViewProps {
   projects: Project[];
@@ -89,12 +90,27 @@ export const NotesView: React.FC<NotesViewProps> = ({
 
   const getProject = (id: string) => projects.find((p) => p.id === id);
 
+  const getNoteVisualColors = (projectId: string, fallbackHex: string) => {
+    const proj =
+      projectId && projectId !== 'general' ? getProject(projectId) : undefined;
+    if (proj) {
+      return deriveLightPostItColors(proj.color);
+    }
+    const pal = getPaletteEntry(fallbackHex || '#FEF9C3');
+    return { bgHex: pal.hex, borderHex: pal.borderHex };
+  };
+
   const handleNewPostIt = async () => {
-    const nextColor =
-      POSTIT_COLOR_PALETTE[notebooks.length % (POSTIT_COLOR_PALETTE.length - 1)]
-        .hex;
+    const targetProjectId =
+      selectedProjectId === 'all' ? 'general' : selectedProjectId;
+    const targetProj = getProject(targetProjectId);
+    const nextColor = targetProj
+      ? deriveLightPostItColors(targetProj.color).bgHex
+      : POSTIT_COLOR_PALETTE[
+          notebooks.length % (POSTIT_COLOR_PALETTE.length - 1)
+        ].hex;
     const newId = await onCreateNotebook({
-      projectId: selectedProjectId === 'all' ? 'general' : selectedProjectId,
+      projectId: targetProjectId,
       title: 'Nouveau post-it',
       content: '',
       color: nextColor,
@@ -173,7 +189,10 @@ export const NotesView: React.FC<NotesViewProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
           {sortedNotebooks.map((note) => {
             const proj = getProject(note.projectId);
-            const palette = getPaletteEntry(note.color || '#FEF9C3');
+            const visualColors = getNoteVisualColors(
+              note.projectId,
+              note.color || '#FEF9C3'
+            );
             return (
               <div
                 key={note.id}
@@ -188,8 +207,8 @@ export const NotesView: React.FC<NotesViewProps> = ({
                 }}
                 className="group relative rounded-2xl p-5 min-h-[210px] flex flex-col justify-between gap-4 border shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
                 style={{
-                  backgroundColor: palette.hex,
-                  borderColor: palette.borderHex,
+                  backgroundColor: visualColors.bgHex,
+                  borderColor: visualColors.borderHex,
                 }}
               >
                 <div className="space-y-2.5 min-w-0">
@@ -285,8 +304,10 @@ export const NotesView: React.FC<NotesViewProps> = ({
             onClick={(e) => e.stopPropagation()}
             className="w-full max-w-5xl h-[94dvh] sm:h-[90vh] rounded-xl sm:rounded-2xl border shadow-2xl flex flex-col overflow-hidden transition-colors"
             style={{
-              backgroundColor: getPaletteEntry(draftColor).hex,
-              borderColor: getPaletteEntry(draftColor).borderHex,
+              backgroundColor: getNoteVisualColors(draftProjectId, draftColor)
+                .bgHex,
+              borderColor: getNoteVisualColors(draftProjectId, draftColor)
+                .borderHex,
             }}
           >
             <div className="px-5 sm:px-7 py-4 border-b border-black/10 flex flex-wrap items-center justify-between gap-3 bg-white/45">
@@ -359,7 +380,14 @@ export const NotesView: React.FC<NotesViewProps> = ({
                 <select
                   id="modal-note-project"
                   value={draftProjectId}
-                  onChange={(e) => setDraftProjectId(e.target.value)}
+                  onChange={(e) => {
+                    const nextPid = e.target.value;
+                    setDraftProjectId(nextPid);
+                    const nextProj = getProject(nextPid);
+                    if (nextProj) {
+                      setDraftColor(deriveLightPostItColors(nextProj.color).bgHex);
+                    }
+                  }}
                   className="rounded-lg border border-black/15 bg-white/85 px-3 py-1.5 text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
                 >
                   <option value="general">Général</option>
@@ -371,28 +399,41 @@ export const NotesView: React.FC<NotesViewProps> = ({
                 </select>
               </div>
 
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-medium text-slate-700">
-                  Couleur :
-                </span>
-                <div className="flex items-center gap-1.5">
-                  {POSTIT_COLOR_PALETTE.map((swatch) => (
-                    <button
-                      key={swatch.hex}
-                      type="button"
-                      title={swatch.label}
-                      aria-label={`Couleur ${swatch.label}`}
-                      onClick={() => setDraftColor(swatch.hex)}
-                      className={`w-6 h-6 rounded-md border transition-transform ${
-                        draftColor.toLowerCase() === swatch.hex.toLowerCase()
-                          ? 'border-slate-900 scale-110 ring-2 ring-slate-900/20'
-                          : 'border-slate-300'
-                      }`}
-                      style={{ backgroundColor: swatch.hex }}
-                    />
-                  ))}
+              {draftProjectId !== 'general' && getProject(draftProjectId) ? (
+                <div className="inline-flex items-center gap-2 text-xs font-medium text-slate-700 bg-white/65 px-3 py-1.5 rounded-lg border border-black/10">
+                  <span
+                    className="w-3.5 h-3.5 rounded-sm border border-black/15 shrink-0"
+                    style={{
+                      backgroundColor: getProject(draftProjectId)?.color,
+                    }}
+                    aria-hidden="true"
+                  />
+                  <span>Couleur claire automatique du chantier</span>
                 </div>
-              </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-slate-700">
+                    Couleur :
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {POSTIT_COLOR_PALETTE.map((swatch) => (
+                      <button
+                        key={swatch.hex}
+                        type="button"
+                        title={swatch.label}
+                        aria-label={`Couleur ${swatch.label}`}
+                        onClick={() => setDraftColor(swatch.hex)}
+                        className={`w-6 h-6 rounded-md border transition-transform ${
+                          draftColor.toLowerCase() === swatch.hex.toLowerCase()
+                            ? 'border-slate-900 scale-110 ring-2 ring-slate-900/20'
+                            : 'border-slate-300'
+                        }`}
+                        style={{ backgroundColor: swatch.hex }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex-1 p-5 sm:p-7 flex flex-col min-h-0">

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  Check,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -16,6 +17,8 @@ import {
 } from 'lucide-react';
 import { PROJECT_COLOR_PALETTE } from '../data/initialData';
 import { CalendarEntry, CalendarViewMode, Project } from '../types';
+import { getCachedCalendarAccessToken } from '../firebase';
+import { sendGoogleCalendarInvites } from '../utils/googleCalendarInvite';
 
 interface CalendarViewProps {
   projects: Project[];
@@ -32,7 +35,7 @@ interface CalendarViewProps {
     startTime: string;
     durationMinutes: number;
     location: string;
-  }) => Promise<void>;
+  }) => Promise<string | void>;
   onUpdateEntry: (
     id: string,
     patch: Partial<
@@ -50,7 +53,11 @@ interface CalendarViewProps {
   ) => Promise<void>;
   onDeleteEntry: (id: string) => Promise<void>;
   onChangeProjectColor: (projectId: string, color: string) => Promise<void>;
+  onCreateManualProject: (
+    project: Omit<Project, 'id'> & { id?: string }
+  ) => Promise<string | null>;
   onImportProjectControlerFile: (files: File | FileList | File[]) => Promise<void>;
+  onNotify?: (msg: string) => void;
 }
 
 const WEEKDAYS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
@@ -163,21 +170,17 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   onUpdateEntry,
   onDeleteEntry,
   onChangeProjectColor,
+  onCreateManualProject,
   onImportProjectControlerFile,
+  onNotify,
 }) => {
   const todayStr = formatDateStr(new Date());
   const [viewMode, setViewMode] = useState<CalendarViewMode>('month');
   const [anchorDate, setAnchorDate] = useState<string>(todayStr);
   const [editingColorFor, setEditingColorFor] = useState<string | null>(null);
 
-  const [inlineDraftTarget, setInlineDraftTarget] = useState<{
-    date: string;
-    startTime: string;
-  } | null>(null);
-  const [inlineDraftTitle, setInlineDraftTitle] = useState('');
-  const [inlineSaving, setInlineSaving] = useState(false);
-
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
+  const [creatingNewEvent, setCreatingNewEvent] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editProjectId, setEditProjectId] = useState('general');
   const [editDate, setEditDate] = useState(todayStr);
@@ -186,7 +189,31 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const [editLocation, setEditLocation] = useState('');
   const [editDetails, setEditDetails] = useState('');
   const [selectedInviteEmails, setSelectedInviteEmails] = useState<string[]>([]);
+  const [autoSendInvite, setAutoSendInvite] = useState(true);
   const [savingEntry, setSavingEntry] = useState(false);
+  const [pendingInviteConfirm, setPendingInviteConfirm] = useState<{
+    summary: string;
+    description: string;
+    location: string;
+    start: Date;
+    end: Date;
+    attendeeEmails: string[];
+    date: string;
+    startTime: string;
+  } | null>(null);
+  const [sendingInvite, setSendingInvite] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+
+  const [showManualProjectModal, setShowManualProjectModal] = useState(false);
+  const [manualProjName, setManualProjName] = useState('');
+  const [manualProjCode, setManualProjCode] = useState('');
+  const [manualProjCommune, setManualProjCommune] = useState('');
+  const [manualProjColor, setManualProjColor] = useState(
+    PROJECT_COLOR_PALETTE[0].hex
+  );
+  const [savingManualProj, setSavingManualProj] = useState(false);
+  const [assignManualToEventModal, setAssignManualToEventModal] =
+    useState(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -197,9 +224,12 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const selectedEntry = selectedEntryId
     ? entries.find((e) => e.id === selectedEntryId) ?? null
     : null;
+  const isEventModalOpen =
+    creatingNewEvent || Boolean(selectedEntry) || Boolean(pendingInviteConfirm);
 
   useEffect(() => {
     if (selectedEntry) {
+      setCreatingNewEvent(false);
       setEditTitle(selectedEntry.title);
       setEditProjectId(selectedEntry.projectId || 'general');
       setEditDate(selectedEntry.date);
@@ -208,17 +238,27 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       setEditLocation(selectedEntry.location || '');
       setEditDetails(selectedEntry.details || '');
       setSelectedInviteEmails(calendarInviteEmails);
+      setAutoSendInvite(calendarInviteEmails.length > 0);
+      setPendingInviteConfirm(null);
+      setInviteError(null);
     }
   }, [selectedEntryId, calendarInviteEmails]);
 
   useEffect(() => {
-    if (!selectedEntryId) return;
+    if (!isEventModalOpen && !showManualProjectModal) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setSelectedEntryId(null);
+      if (e.key === 'Escape') {
+        if (showManualProjectModal) {
+          setShowManualProjectModal(false);
+        } else {
+          setSelectedEntryId(null);
+          setCreatingNewEvent(false);
+        }
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selectedEntryId]);
+  }, [isEventModalOpen, showManualProjectModal]);
 
   const getProject = (id: string) => projects.find((p) => p.id === id);
 
@@ -253,54 +293,150 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     return `Semaine du ${monday.getDate()} ${MONTH_NAMES[monday.getMonth()]} au ${sunday.getDate()} ${MONTH_NAMES[sunday.getMonth()]} ${sunday.getFullYear()}`;
   };
 
-  const openInlineDraft = (date: string, startTime = '09:00') => {
-    setInlineDraftTarget({ date, startTime });
-    setInlineDraftTitle('');
+  const openNewEventModal = (date = anchorDate, startTime = '09:00') => {
+    setSelectedEntryId(null);
+    setCreatingNewEvent(true);
+    setEditTitle('');
+    setEditProjectId(projects[0]?.id ?? 'general');
+    setEditDate(date);
+    setEditStartTime(startTime);
+    setEditDurationMinutes(60);
+    setEditLocation('');
+    setEditDetails('');
+    setSelectedInviteEmails(calendarInviteEmails);
+    setAutoSendInvite(calendarInviteEmails.length > 0);
+    setPendingInviteConfirm(null);
+    setInviteError(null);
   };
 
-  const submitInlineDraft = async () => {
-    if (!inlineDraftTarget || inlineSaving) return;
-    const title = inlineDraftTitle.trim();
-    if (!title) {
-      setInlineDraftTarget(null);
-      return;
-    }
-    setInlineSaving(true);
+  const openManualProjectModal = (assignToEvent = false) => {
+    setAssignManualToEventModal(assignToEvent);
+    setManualProjName('');
+    setManualProjCode('');
+    setManualProjCommune('');
+    setManualProjColor(
+      PROJECT_COLOR_PALETTE[projects.length % PROJECT_COLOR_PALETTE.length].hex
+    );
+    setShowManualProjectModal(true);
+  };
+
+  const handleSaveManualProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualProjName.trim() || savingManualProj) return;
+    setSavingManualProj(true);
     try {
-      await onAddAnnotation({
-        projectId: projects[0]?.id ?? 'general',
-        date: inlineDraftTarget.date,
-        title,
-        details: '',
-        startTime: inlineDraftTarget.startTime,
-        durationMinutes: 60,
-        location: '',
+      const autoCode = `LIB-${String(projects.length + 1).padStart(2, '0')}`;
+      const createdId = await onCreateManualProject({
+        code: manualProjCode.trim() || autoCode,
+        name: manualProjName.trim(),
+        commune: manualProjCommune.trim() || 'Chantier libre',
+        color: manualProjColor,
+        marcheTotalReviseEur: 0,
+        cumulEaValidesEur: 0,
+        eaEnCoursEur: 0,
+        eaEnCoursCoche: false,
+        delaiRestantJours: 0,
+        startDate: todayStr,
+        contractualEndDate: todayStr,
+        estimatedEndDate: todayStr,
       });
-      setInlineDraftTarget(null);
-      setInlineDraftTitle('');
+      if (assignManualToEventModal && createdId) {
+        setEditProjectId(createdId);
+      }
+      setShowManualProjectModal(false);
     } finally {
-      setInlineSaving(false);
+      setSavingManualProj(false);
     }
+  };
+
+  const openInlineDraft = (date: string, startTime = '09:00') => {
+    openNewEventModal(date, startTime);
+  };
+
+  const closeEventModal = () => {
+    setSelectedEntryId(null);
+    setCreatingNewEvent(false);
+    setPendingInviteConfirm(null);
+    setInviteError(null);
   };
 
   const handleSaveModalEntry = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedEntry || selectedEntry.source === 'project-controler') return;
+    if (selectedEntry && selectedEntry.source === 'project-controler') return;
     if (!editTitle.trim()) return;
     setSavingEntry(true);
+    setInviteError(null);
     try {
-      await onUpdateEntry(selectedEntry.id, {
-        title: editTitle.trim(),
-        projectId: editProjectId || 'general',
-        date: editDate,
-        startTime: editStartTime,
-        durationMinutes: Math.max(0, Number(editDurationMinutes) || 60),
-        location: editLocation.trim(),
-        details: editDetails.trim(),
-      });
-      setSelectedEntryId(null);
+      if (creatingNewEvent) {
+        await onAddAnnotation({
+          title: editTitle.trim(),
+          projectId: editProjectId || 'general',
+          date: editDate,
+          startTime: editStartTime,
+          durationMinutes: Math.max(0, Number(editDurationMinutes) || 60),
+          location: editLocation.trim(),
+          details: editDetails.trim(),
+        });
+      } else if (selectedEntry) {
+        await onUpdateEntry(selectedEntry.id, {
+          title: editTitle.trim(),
+          projectId: editProjectId || 'general',
+          date: editDate,
+          startTime: editStartTime,
+          durationMinutes: Math.max(0, Number(editDurationMinutes) || 60),
+          location: editLocation.trim(),
+          details: editDetails.trim(),
+        });
+      }
+
+      if (autoSendInvite && selectedInviteEmails.length > 0) {
+        const preview = buildInviteLinks();
+        setCreatingNewEvent(false);
+        setSelectedEntryId(null);
+        setPendingInviteConfirm({
+          summary: preview.fullTitle,
+          description: preview.detailsLines,
+          location: editLocation.trim(),
+          start: preview.start,
+          end: preview.end,
+          attendeeEmails: [...selectedInviteEmails],
+          date: editDate,
+          startTime: editStartTime,
+        });
+      } else {
+        setCreatingNewEvent(false);
+        setSelectedEntryId(null);
+      }
     } finally {
       setSavingEntry(false);
+    }
+  };
+
+  const handleConfirmAutoSendInvite = async () => {
+    if (!pendingInviteConfirm || sendingInvite) return;
+    setSendingInvite(true);
+    setInviteError(null);
+    try {
+      const res = await sendGoogleCalendarInvites({
+        summary: pendingInviteConfirm.summary,
+        description: pendingInviteConfirm.description,
+        location: pendingInviteConfirm.location,
+        start: pendingInviteConfirm.start,
+        end: pendingInviteConfirm.end,
+        attendeeEmails: pendingInviteConfirm.attendeeEmails,
+      });
+      onNotify?.(
+        `Invitation envoyée depuis ${res.organizerEmail || controllerEmail} à ${res.attendeesCount} destinataire(s).`
+      );
+      setPendingInviteConfirm(null);
+    } catch (err) {
+      setInviteError(
+        err instanceof Error
+          ? err.message
+          : 'Impossible d’envoyer l’invitation via Google Calendar.'
+      );
+    } finally {
+      setSendingInvite(false);
     }
   };
 
@@ -507,9 +643,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     entriesForDate(d).some(isAllDayEntry)
   );
 
-  const invitePreview = selectedEntry && selectedEntry.source !== 'project-controler'
-    ? buildInviteLinks()
-    : null;
+  const invitePreview =
+    creatingNewEvent ||
+    (selectedEntry && selectedEntry.source !== 'project-controler')
+      ? buildInviteLinks()
+      : null;
 
   return (
     <div className="space-y-5">
@@ -519,11 +657,20 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             Calendrier chantier
           </h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            Double-cliquez sur une case pour écrire un titre · Les intempéries et congés Project-Controler apparaissent en info journée entière.
+            Double-cliquez sur une case ou cliquez sur « Nouvel événement » · Les intempéries et congés Project-Controler apparaissent en info journée entière.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => openNewEventModal(anchorDate, '09:00')}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-xs font-semibold text-white hover:from-emerald-700 hover:to-teal-700 shadow-xs transition-all whitespace-nowrap"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Nouvel événement</span>
+          </button>
+
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
@@ -553,9 +700,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         </div>
       </div>
 
-      <div className="bg-white border border-slate-200/90 rounded-2xl shadow-xs p-3.5 flex flex-wrap items-center gap-3">
+      <div className="bg-white border border-slate-200/90 rounded-2xl shadow-xs p-3.5 flex flex-wrap items-center gap-2.5">
         <span className="text-xs font-medium text-slate-500">
-          Couleurs par chantier :
+          Chantiers & couleurs :
         </span>
         {projects.map((proj) => (
           <div key={proj.id} className="relative">
@@ -599,6 +746,16 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             )}
           </div>
         ))}
+
+        <button
+          type="button"
+          onClick={() => openManualProjectModal(false)}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-dashed border-blue-300 bg-blue-50/70 hover:bg-blue-100/80 text-xs font-semibold text-blue-800 transition-colors whitespace-nowrap"
+          title="Ajouter un chantier libre sans le lier à Project-Controler"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          <span>Nouveau chantier manuel</span>
+        </button>
       </div>
 
       <div className="bg-white border border-slate-200/90 rounded-2xl shadow-xs overflow-hidden">
@@ -684,7 +841,6 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                 const dayEntries = entriesForDate(dateStr);
                 const isSelected = dateStr === anchorDate;
                 const isToday = dateStr === todayStr;
-                const isEditingInline = inlineDraftTarget?.date === dateStr;
 
                 return (
                   <div
@@ -743,27 +899,6 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
                     <div className="hidden sm:block space-y-1 w-full">
                       {dayEntries.map((ev) => renderEventChip(ev, true))}
-
-                      {isEditingInline && (
-                        <input
-                          type="text"
-                          autoFocus
-                          value={inlineDraftTitle}
-                          onChange={(e) => setInlineDraftTitle(e.target.value)}
-                          onClick={(e) => e.stopPropagation()}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              submitInlineDraft();
-                            } else if (e.key === 'Escape') {
-                              setInlineDraftTarget(null);
-                            }
-                          }}
-                          onBlur={() => submitInlineDraft()}
-                          placeholder="Titre + Entrée..."
-                          className="w-full rounded border border-blue-500 bg-white px-2 py-1 text-[11px] font-medium text-slate-900 focus:outline-none shadow-xs"
-                        />
-                      )}
                     </div>
                   </div>
                 );
@@ -789,34 +924,6 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   <span>Ajouter</span>
                 </button>
               </div>
-
-              {inlineDraftTarget?.date === anchorDate && (
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    autoFocus
-                    value={inlineDraftTitle}
-                    onChange={(e) => setInlineDraftTitle(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        submitInlineDraft();
-                      } else if (e.key === 'Escape') {
-                        setInlineDraftTarget(null);
-                      }
-                    }}
-                    placeholder="Titre du rendez-vous..."
-                    className="flex-1 rounded-lg border border-blue-500 bg-white px-3 py-2 text-xs text-slate-900 focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => submitInlineDraft()}
-                    className="px-3 py-2 rounded-lg bg-blue-700 text-xs font-medium text-white shrink-0"
-                  >
-                    OK
-                  </button>
-                </div>
-              )}
 
               <div className="space-y-2">
                 {entriesForDate(anchorDate).map((ev) => {
@@ -990,9 +1097,6 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                             );
                             return evHour === hour;
                           });
-                          const isInlineHere =
-                            inlineDraftTarget?.date === dStr &&
-                            inlineDraftTarget?.startTime === slotTime;
 
                           return (
                             <div
@@ -1001,27 +1105,6 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                               className="p-1.5 border-r border-slate-100 hover:bg-blue-50/30 transition-colors cursor-pointer space-y-1"
                             >
                               {slotEntries.map((ev) => renderEventChip(ev))}
-                              {isInlineHere && (
-                                <input
-                                  type="text"
-                                  autoFocus
-                                  value={inlineDraftTitle}
-                                  onChange={(e) =>
-                                    setInlineDraftTitle(e.target.value)
-                                  }
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                      e.preventDefault();
-                                      submitInlineDraft();
-                                    } else if (e.key === 'Escape') {
-                                      setInlineDraftTarget(null);
-                                    }
-                                  }}
-                                  onBlur={() => submitInlineDraft()}
-                                  placeholder="Titre..."
-                                  className="w-full rounded border border-blue-500 bg-white px-1.5 py-1 text-[11px] text-slate-900 focus:outline-none"
-                                />
-                              )}
                             </div>
                           );
                         })}
@@ -1080,9 +1163,6 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                 const evHour = Number((ev.startTime || '09:00').slice(0, 2));
                 return evHour === hour;
               });
-              const isInlineHere =
-                inlineDraftTarget?.date === anchorDate &&
-                inlineDraftTarget?.startTime === slotTime;
 
               return (
                 <div
@@ -1147,27 +1227,6 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         </button>
                       );
                     })}
-
-                    {isInlineHere && (
-                      <input
-                        type="text"
-                        autoFocus
-                        value={inlineDraftTitle}
-                        onChange={(e) => setInlineDraftTitle(e.target.value)}
-                        onClick={(e) => e.stopPropagation()}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            submitInlineDraft();
-                          } else if (e.key === 'Escape') {
-                            setInlineDraftTarget(null);
-                          }
-                        }}
-                        onBlur={() => submitInlineDraft()}
-                        placeholder="Saisissez le titre et appuyez sur Entrée..."
-                        className="w-72 rounded-lg border border-blue-500 bg-white px-3 py-1.5 text-xs font-medium text-slate-900 focus:outline-none"
-                      />
-                    )}
                   </div>
                 </div>
               );
@@ -1265,10 +1324,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         )}
       </div>
 
-      {selectedEntry && (
+      {isEventModalOpen && (
         <div
           className="fixed inset-0 z-50 bg-slate-900/50 p-4 flex items-center justify-center overflow-y-auto"
-          onClick={() => setSelectedEntryId(null)}
+          onClick={closeEventModal}
           role="dialog"
           aria-modal="true"
           aria-label="Paramètres de l'événement"
@@ -1279,13 +1338,17 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           >
             <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
               <h3 className="text-base font-bold text-slate-900">
-                {selectedEntry.source === 'project-controler'
+                {pendingInviteConfirm
+                  ? 'Confirmer l’envoi de l’invitation'
+                  : selectedEntry?.source === 'project-controler'
                   ? `${selectedEntry.entryType} · Info Project-Controler`
+                  : creatingNewEvent
+                  ? 'Nouvel événement & Invitation RDV'
                   : 'Paramètres & Invitation RDV'}
               </h3>
               <button
                 type="button"
-                onClick={() => setSelectedEntryId(null)}
+                onClick={closeEventModal}
                 aria-label="Fermer"
                 className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-200/60"
               >
@@ -1293,7 +1356,95 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               </button>
             </div>
 
-            {selectedEntry.source === 'project-controler' ? (
+            {pendingInviteConfirm ? (() => {
+              const hasSessionMailConsent = Boolean(
+                getCachedCalendarAccessToken()
+              );
+              return (
+                <div className="p-6 space-y-4">
+                  <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 space-y-2.5 text-xs text-blue-950">
+                    <div className="font-bold text-sm text-blue-900 flex items-center gap-2">
+                      <Send className="w-4 h-4 text-blue-700 shrink-0" />
+                      <span>Événement enregistré dans votre B.O.C</span>
+                    </div>
+
+                    <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 text-[11px] text-emerald-950 space-y-0.5">
+                      <div>
+                        <strong>Compte expéditeur (le vôtre) :</strong>{' '}
+                        <span className="font-mono font-semibold">
+                          {controllerEmail}
+                        </span>
+                      </div>
+                      <div className="text-emerald-800">
+                        L’invitation partira directement depuis votre propre agenda Google. Elle ne transite par aucun autre membre ni administrateur.
+                      </div>
+                    </div>
+
+                    {!hasSessionMailConsent && (
+                      <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] text-amber-950">
+                        Un <strong>pop-up Google</strong> va vous demander l’accord de votre messagerie (
+                        <span className="font-mono">{controllerEmail}</span>) pour envoyer cette invitation.
+                      </div>
+                    )}
+
+                    <div className="bg-white/85 rounded-lg border border-blue-200/80 p-3 space-y-1">
+                      <div className="font-semibold text-slate-900">
+                        {pendingInviteConfirm.summary}
+                      </div>
+                      <div className="font-mono text-[11px] text-slate-600">
+                        {pendingInviteConfirm.date} à {pendingInviteConfirm.startTime}
+                        {pendingInviteConfirm.location
+                          ? ` · ${pendingInviteConfirm.location}`
+                          : ''}
+                      </div>
+                      <div className="pt-1 flex flex-wrap gap-1.5">
+                        {pendingInviteConfirm.attendeeEmails.map((em) => (
+                          <span
+                            key={em}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-100 text-blue-900 font-mono text-[11px]"
+                          >
+                            <Mail className="w-3 h-3" />
+                            {em}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {inviteError && (
+                    <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-red-800">
+                      {inviteError}
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                    <button
+                      type="button"
+                      disabled={sendingInvite}
+                      onClick={closeEventModal}
+                      className="px-4 py-2 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                    >
+                      Enregistrer sans envoyer
+                    </button>
+                    <button
+                      type="button"
+                      disabled={sendingInvite}
+                      onClick={handleConfirmAutoSendInvite}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gradient-to-r from-blue-700 to-sky-600 text-xs font-semibold text-white hover:from-blue-800 hover:to-sky-700 disabled:opacity-60 shadow-xs"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>
+                        {sendingInvite
+                          ? 'Envoi en cours...'
+                          : hasSessionMailConsent
+                          ? 'Confirmer et envoyer l’invitation'
+                          : 'Autoriser mon mail et envoyer'}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })() : selectedEntry && selectedEntry.source === 'project-controler' ? (
               <div className="p-6 space-y-4">
                 <div className="p-3.5 rounded-lg bg-blue-50 border border-blue-200 text-xs text-blue-900 flex items-start gap-2.5">
                   <CloudRain className="w-4 h-4 text-blue-700 shrink-0 mt-0.5" />
@@ -1354,17 +1505,28 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   <input
                     type="text"
                     required
+                    autoFocus
                     value={editTitle}
                     onChange={(e) => setEditTitle(e.target.value)}
+                    placeholder="Ex. Réunion de chantier hebdomadaire"
                     className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
                   />
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">
-                      Chantier (couleur)
-                    </label>
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <label className="block text-xs font-medium text-slate-600">
+                        Chantier (couleur)
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => openManualProjectModal(true)}
+                        className="text-[11px] font-semibold text-blue-700 hover:text-blue-800 whitespace-nowrap"
+                      >
+                        + Chantier manuel
+                      </button>
+                    </div>
                     <select
                       value={editProjectId}
                       onChange={(e) => setEditProjectId(e.target.value)}
@@ -1481,29 +1643,43 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     </div>
 
                     {calendarInviteEmails.length > 0 ? (
-                      <div className="flex flex-wrap gap-2">
-                        {calendarInviteEmails.map((em) => {
-                          const checked = selectedInviteEmails.includes(em);
-                          return (
-                            <label
-                              key={em}
-                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs cursor-pointer transition-colors ${
-                                checked
-                                  ? 'bg-blue-50 border-blue-300 text-blue-900 font-medium'
-                                  : 'bg-white border-slate-200 text-slate-600'
-                              }`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={() => toggleInviteRecipient(em)}
-                                className="w-3.5 h-3.5 rounded border-slate-300 text-blue-700"
-                              />
-                              <Mail className="w-3 h-3 shrink-0" />
-                              <span className="font-mono text-[11px]">{em}</span>
-                            </label>
-                          );
-                        })}
+                      <div className="space-y-2.5">
+                        <div className="flex flex-wrap gap-2">
+                          {calendarInviteEmails.map((em) => {
+                            const checked = selectedInviteEmails.includes(em);
+                            return (
+                              <label
+                                key={em}
+                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs cursor-pointer transition-colors ${
+                                  checked
+                                    ? 'bg-blue-50 border-blue-300 text-blue-900 font-medium'
+                                    : 'bg-white border-slate-200 text-slate-600'
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => toggleInviteRecipient(em)}
+                                  className="w-3.5 h-3.5 rounded border-slate-300 text-blue-700"
+                                />
+                                <Mail className="w-3 h-3 shrink-0" />
+                                <span className="font-mono text-[11px]">{em}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+
+                        <label className="flex items-start gap-2 rounded-lg bg-white border border-blue-200/80 px-3 py-2 text-xs text-slate-700 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={autoSendInvite}
+                            onChange={(e) => setAutoSendInvite(e.target.checked)}
+                            className="w-3.5 h-3.5 rounded border-slate-300 text-blue-700 mt-0.5 shrink-0"
+                          />
+                          <span>
+                            Envoyer automatiquement l’invitation depuis votre compte (<span className="font-mono text-slate-900">{controllerEmail}</span>) aux adresses cochées lors du clic sur <strong>Enregistrer</strong> (avec votre accord Google).
+                          </span>
+                        </label>
                       </div>
                     ) : (
                       <p className="text-[11px] text-slate-500">
@@ -1543,19 +1719,25 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                 )}
 
                 <div className="pt-2 flex items-center justify-between gap-3 border-t border-slate-100">
-                  <button
-                    type="button"
-                    onClick={handleDeleteFromModal}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-red-200 text-xs font-medium text-red-700 hover:bg-red-50 transition-colors"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Supprimer</span>
-                  </button>
+                  {selectedEntry ? (
+                    <button
+                      type="button"
+                      onClick={handleDeleteFromModal}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-red-200 text-xs font-medium text-red-700 hover:bg-red-50 transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Supprimer</span>
+                    </button>
+                  ) : (
+                    <span className="text-[11px] text-slate-400">
+                      Création d’événement B.O.C
+                    </span>
+                  )}
 
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => setSelectedEntryId(null)}
+                      onClick={closeEventModal}
                       className="px-4 py-2 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50"
                     >
                       Annuler
@@ -1571,6 +1753,123 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {showManualProjectModal && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/55 p-4 flex items-center justify-center"
+          onClick={() => setShowManualProjectModal(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Ajouter un chantier manuel"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden"
+          >
+            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">
+                  Nouveau chantier manuel
+                </h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Chantier libre sans liaison Project-Controler (utilisable partout dans B.O.C).
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowManualProjectModal(false)}
+                aria-label="Fermer"
+                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-200/60"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveManualProject} className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">
+                  Intitulé / Nom du chantier
+                </label>
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  value={manualProjName}
+                  onChange={(e) => setManualProjName(e.target.value)}
+                  placeholder="Ex. Visite préliminaire rue Haute"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                    Code (optionnel)
+                  </label>
+                  <input
+                    type="text"
+                    value={manualProjCode}
+                    onChange={(e) => setManualProjCode(e.target.value)}
+                    placeholder={`Ex. LIB-${String(projects.length + 1).padStart(2, '0')}`}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                    Commune / Lieu (optionnel)
+                  </label>
+                  <input
+                    type="text"
+                    value={manualProjCommune}
+                    onChange={(e) => setManualProjCommune(e.target.value)}
+                    placeholder="Ex. Namur"
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <span className="block text-xs font-medium text-slate-700 mb-2">
+                  Couleur d’identification
+                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  {PROJECT_COLOR_PALETTE.map((swatch) => (
+                    <button
+                      key={swatch.hex}
+                      type="button"
+                      title={swatch.label}
+                      onClick={() => setManualProjColor(swatch.hex)}
+                      className={`w-7 h-7 rounded-md border transition-transform ${
+                        manualProjColor === swatch.hex
+                          ? 'border-slate-900 scale-110 ring-2 ring-slate-900/20'
+                          : 'border-slate-200'
+                      }`}
+                      style={{ backgroundColor: swatch.hex }}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowManualProjectModal(false)}
+                  className="px-4 py-2 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingManualProj}
+                  className="px-4 py-2 rounded-lg bg-blue-700 text-xs font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
+                >
+                  {savingManualProj ? 'Ajout...' : 'Ajouter le chantier'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

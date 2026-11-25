@@ -1,14 +1,43 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  CheckCircle2,
   Download,
+  FolderOpen,
   HardDriveDownload,
   Lock,
   MailPlus,
+  RefreshCw,
+  Save,
   Settings,
   ShieldCheck,
+  Trash2,
   Upload,
 } from 'lucide-react';
+import {
+  getCachedCalendarAccessToken,
+  requestCalendarAccessToken,
+} from '../firebase';
 import { ControllerProfile } from '../types';
+import {
+  AutoBackupIntervalMinutes,
+  BackupPermissionState,
+  LocalBackupMetadata,
+  LocalBackupSettings,
+} from '../utils/localBackupFolder';
+
+interface LocalBackupControlProps {
+  supported: boolean;
+  inEmbeddedFrame: boolean;
+  metadata: LocalBackupMetadata | null;
+  permission: BackupPermissionState;
+  saving: boolean;
+  error: string | null;
+  onChooseFolder: () => Promise<void>;
+  onReactivateFolder: () => Promise<void>;
+  onSaveNow: () => Promise<void>;
+  onRemoveFolder: () => Promise<void>;
+  onUpdateSettings: (next: LocalBackupSettings) => Promise<void>;
+}
 
 interface AppsConnectorViewProps {
   controller: ControllerProfile;
@@ -22,6 +51,7 @@ interface AppsConnectorViewProps {
   onRestoreBackup: (
     file: File
   ) => Promise<{ ok: boolean; message: string }>;
+  localBackup: LocalBackupControlProps;
 }
 
 export const AppsConnectorView: React.FC<AppsConnectorViewProps> = ({
@@ -30,6 +60,7 @@ export const AppsConnectorView: React.FC<AppsConnectorViewProps> = ({
   onSaveCalendarInviteEmails,
   onExportBackup,
   onRestoreBackup,
+  localBackup,
 }) => {
   const [jtdUrl, setJtdUrl] = useState(controller.jtdUrl);
   const [inasepUrl, setInasepUrl] = useState(controller.inasepUrl);
@@ -56,6 +87,11 @@ export const AppsConnectorView: React.FC<AppsConnectorViewProps> = ({
   const [savingEmails, setSavingEmails] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
   const [emailSavedMsg, setEmailSavedMsg] = useState(false);
+  const [mailAuthActive, setMailAuthActive] = useState(() =>
+    Boolean(getCachedCalendarAccessToken())
+  );
+  const [authorizingMail, setAuthorizingMail] = useState(false);
+  const [mailAuthError, setMailAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     setInviteSlot1(controller.calendarInviteEmails[0] ?? '');
@@ -361,6 +397,59 @@ export const AppsConnectorView: React.FC<AppsConnectorViewProps> = ({
           </div>
         </div>
 
+        <div className="px-5 pt-4">
+          <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/60 p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="space-y-0.5 text-xs">
+              <div className="font-semibold text-emerald-950">
+                Expéditeur de vos invitations :{' '}
+                <span className="font-mono">{controller.email}</span>
+              </div>
+              <p className="text-emerald-800">
+                Chaque membre connecté envoie ses invitations uniquement depuis son propre compte Google (aucun transit par un autre membre).
+              </p>
+            </div>
+            {mailAuthActive ? (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-emerald-200 text-xs font-semibold text-emerald-800 whitespace-nowrap shrink-0">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Messagerie autorisée</span>
+              </span>
+            ) : (
+              <button
+                type="button"
+                disabled={authorizingMail}
+                onClick={async () => {
+                  setAuthorizingMail(true);
+                  setMailAuthError(null);
+                  try {
+                    await requestCalendarAccessToken();
+                    setMailAuthActive(true);
+                  } catch (err) {
+                    setMailAuthError(
+                      err instanceof Error
+                        ? err.message
+                        : 'Impossible d’autoriser la messagerie.'
+                    );
+                  } finally {
+                    setAuthorizingMail(false);
+                  }
+                }}
+                className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg bg-white border border-emerald-300 text-xs font-semibold text-emerald-900 hover:bg-emerald-100/60 disabled:opacity-60 transition-colors whitespace-nowrap shrink-0"
+              >
+                <span>
+                  {authorizingMail
+                    ? 'Ouverture du pop-up...'
+                    : 'Autoriser mon mail'}
+                </span>
+              </button>
+            )}
+          </div>
+          {mailAuthError && (
+            <div className="mt-2 p-2.5 rounded-lg bg-red-50 border border-red-200 text-xs text-red-800">
+              {mailAuthError}
+            </div>
+          )}
+        </div>
+
         <form onSubmit={handleSaveInviteEmails} className="p-5 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {[
@@ -448,23 +537,232 @@ export const AppsConnectorView: React.FC<AppsConnectorViewProps> = ({
           <HardDriveDownload className="w-5 h-5 text-blue-700 shrink-0 mt-0.5" />
           <div>
             <h2 className="text-sm font-bold text-slate-900">
-              Sauvegarde & Restauration B.O.C (.JSON)
+              Sauvegarde locale (cet appareil) & Synchronisation multi-appareils
             </h2>
-            <p className="text-xs text-slate-600 mt-0.5">
-              Vos données sont enregistrées en temps réel sur votre compte Google (Firestore). Exportez une archive locale par sécurité ou restaurez une sauvegarde B.O.C précédente sans modifier le fonctionnement PWA.
+            <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
+              Vos données sont <strong>synchronisées automatiquement en temps réel</strong> entre tous vos appareils connectés au même compte (<span className="font-mono">{controller.email}</span>). Le dossier de sauvegarde ci-dessous est configuré <strong>uniquement sur cet appareil</strong>.
             </p>
           </div>
         </div>
 
-        <div className="p-5 space-y-4">
+        <div className="p-5 space-y-5">
+          <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-3.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-900">
+                  <FolderOpen className="w-4 h-4 text-blue-700 shrink-0" />
+                  <span>
+                    Dossier de sauvegarde automatique (sur cet appareil uniquement)
+                  </span>
+                </div>
+                {localBackup.metadata ? (
+                  <div className="text-xs text-slate-600 space-y-0.5">
+                    <div>
+                      Dossier sélectionné :{' '}
+                      <span className="font-mono font-semibold text-slate-900">
+                        {localBackup.metadata.folderName}
+                      </span>{' '}
+                      ·{' '}
+                      {localBackup.permission === 'granted' ? (
+                        <span className="font-semibold text-emerald-700">
+                          Actif pour cette session
+                        </span>
+                      ) : (
+                        <span className="font-semibold text-amber-700">
+                          Réactivation requise (1 clic)
+                        </span>
+                      )}
+                    </div>
+                    {localBackup.metadata.lastSavedAt && (
+                      <div className="text-[11px] text-slate-500">
+                        Dernière sauvegarde :{' '}
+                        <span className="font-mono">
+                          {new Date(localBackup.metadata.lastSavedAt).toLocaleString('fr-BE')}
+                        </span>
+                        {localBackup.metadata.lastSavedFile
+                          ? ` (${localBackup.metadata.lastSavedFile})`
+                          : ''}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-500">
+                    Aucun dossier local sélectionné sur cet appareil. Choisissez un dossier pour enregistrer vos sauvegardes sans passer par le téléchargement manuel.
+                  </p>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                {localBackup.metadata && localBackup.permission !== 'granted' && (
+                  <button
+                    type="button"
+                    onClick={() => void localBackup.onReactivateFolder()}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-600 text-xs font-semibold text-white hover:bg-amber-700 transition-colors whitespace-nowrap"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Réactiver le dossier</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  disabled={!localBackup.supported}
+                  onClick={() => void localBackup.onChooseFolder()}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-blue-200 bg-white text-xs font-semibold text-blue-800 hover:bg-blue-50 disabled:opacity-50 transition-colors whitespace-nowrap"
+                >
+                  <FolderOpen className="w-3.5 h-3.5" />
+                  <span>
+                    {localBackup.metadata
+                      ? 'Changer de dossier'
+                      : 'Choisir le dossier'}
+                  </span>
+                </button>
+
+                {localBackup.metadata && (
+                  <button
+                    type="button"
+                    onClick={() => void localBackup.onRemoveFolder()}
+                    title="Retirer le dossier local de cet appareil"
+                    className="inline-flex items-center gap-1 px-2.5 py-2 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-600 hover:bg-red-50 hover:text-red-700 hover:border-red-200 transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Retirer</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {!localBackup.supported && (
+              <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] text-amber-900">
+                Ce navigateur ne permet pas de lier un dossier local permanent (utilisez Chrome/Edge sur PC ou l’application installée pour la sauvegarde automatique dans un dossier ; le bouton de téléchargement `.JSON` ci-dessous fonctionne sur tous vos appareils).
+              </div>
+            )}
+
+            {localBackup.supported && localBackup.inEmbeddedFrame && !localBackup.metadata && (
+              <div className="rounded-lg bg-blue-50 border border-blue-200 px-3 py-2 text-[11px] text-blue-900">
+                Astuce : si l’aperçu intégré bloque l’ouverture du sélecteur de dossier, ouvrez B.O.C dans un onglet dédié ou via l’icône d’application installée (PWA) sur votre PC.
+              </div>
+            )}
+
+            {localBackup.metadata && (
+              <div className="pt-3 border-t border-slate-200/80 space-y-3">
+                <div className="space-y-1.5">
+                  <div className="text-xs font-semibold text-slate-800">
+                    Enregistrement automatique périodique
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(
+                      [
+                        {
+                          value: 0,
+                          label: 'Jamais (bouton Sauvegarder uniquement)',
+                        },
+                        { value: 5, label: '5 min' },
+                        { value: 10, label: '10 min' },
+                        { value: 15, label: '15 min' },
+                        { value: 30, label: '30 min' },
+                      ] as const
+                    ).map((opt) => {
+                      const active =
+                        localBackup.metadata!.settings.autoIntervalMinutes ===
+                        opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => {
+                            const curr = localBackup.metadata!.settings;
+                            void localBackup.onUpdateSettings({
+                              ...curr,
+                              autoIntervalMinutes:
+                                opt.value as AutoBackupIntervalMinutes,
+                            });
+                          }}
+                          className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                            active
+                              ? 'bg-blue-700 border-blue-700 text-white shadow-2xs'
+                              : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {(
+                    [
+                      {
+                        key: 'autoOnOpen',
+                        label:
+                          'Toujours sauvegarder à l’ouverture (écrase le précédent)',
+                      },
+                      {
+                        key: 'autoOnHideOrClose',
+                        label: 'Sauvegarder au changement d’onglet / fermeture',
+                      },
+                    ] as const
+                  ).map((item) => (
+                    <label
+                      key={item.key}
+                      className="flex items-center gap-2 rounded-lg bg-white border border-slate-200 px-3 py-2 text-xs text-slate-700 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={localBackup.metadata!.settings[item.key]}
+                        onChange={(e) => {
+                          const curr = localBackup.metadata!.settings;
+                          void localBackup.onUpdateSettings({
+                            ...curr,
+                            [item.key]: e.target.checked,
+                          });
+                        }}
+                        className="w-3.5 h-3.5 rounded border-slate-300 text-blue-700"
+                      />
+                      <span>{item.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {localBackup.error && (
+              <div className="p-2.5 rounded-lg bg-red-50 border border-red-200 text-xs text-red-800">
+                {localBackup.error}
+              </div>
+            )}
+
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              Le même fichier (<span className="font-mono">boc_sauvegarde.json</span>) est toujours écrasé et mis à jour dans ce dossier à chaque sauvegarde. Par sécurité navigateur, après redémarrage complet du PC ou du navigateur, 1 clic sur <strong>Réactiver</strong> ou <strong>Sauvegarder</strong> suffit pour relancer l’écriture automatique de la session.
+            </p>
+          </div>
+
           <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              disabled={localBackup.saving}
+              onClick={() => void localBackup.onSaveNow()}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-xs font-semibold text-white hover:from-emerald-700 hover:to-teal-700 disabled:opacity-60 shadow-xs transition-all whitespace-nowrap"
+            >
+              <Save className="w-4 h-4 shrink-0" />
+              <span>
+                {localBackup.saving
+                  ? 'Sauvegarde...'
+                  : localBackup.metadata
+                  ? 'Sauvegarder maintenant dans le dossier'
+                  : 'Sauvegarder maintenant (.JSON)'}
+              </span>
+            </button>
+
             <button
               type="button"
               onClick={onExportBackup}
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors whitespace-nowrap"
             >
               <Download className="w-4 h-4 text-blue-700 shrink-0" />
-              <span>Exporter sauvegarde B.O.C (.JSON)</span>
+              <span>Télécharger copie (.JSON)</span>
             </button>
 
             <button

@@ -6,8 +6,8 @@ import {
   Calendar,
   NotebookPen,
   Settings,
-  Download,
   LogOut,
+  Save,
   X,
 } from 'lucide-react';
 import { ControllerProfile, ModuleTab, Project } from '../types';
@@ -19,6 +19,9 @@ interface SidebarProps {
   selectedProjectId: string;
   onSelectProject: (id: string) => void;
   onExportBackup: () => void;
+  localBackupFolderName?: string | null;
+  localBackupNeedsReactivation?: boolean;
+  onReactivateLocalBackup?: () => void;
   onSignOut: () => void;
   controller: ControllerProfile;
   mobileOpen: boolean;
@@ -89,6 +92,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   selectedProjectId,
   onSelectProject,
   onExportBackup,
+  localBackupFolderName,
+  localBackupNeedsReactivation,
+  onReactivateLocalBackup,
   onSignOut,
   controller,
   mobileOpen,
@@ -264,14 +270,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           </div>
 
+          {localBackupFolderName && localBackupNeedsReactivation && onReactivateLocalBackup && (
+            <button
+              type="button"
+              onClick={onReactivateLocalBackup}
+              className="w-full px-2.5 py-1.5 rounded-lg border border-amber-400/40 bg-amber-400/15 text-[11px] font-medium text-amber-200 hover:bg-amber-400/25 transition-colors text-left truncate"
+              title={`Réactiver la sauvegarde auto dans « ${localBackupFolderName} »`}
+            >
+              Réactiver dossier · {localBackupFolderName}
+            </button>
+          )}
+
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
               onClick={onExportBackup}
-              className="flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-lg border border-white/15 bg-white/[0.07] text-xs font-medium text-slate-100 hover:bg-white/15 hover:text-white transition-colors whitespace-nowrap"
+              title={
+                localBackupFolderName
+                  ? `Sauvegarder dans « ${localBackupFolderName} »`
+                  : 'Télécharger une sauvegarde B.O.C (.JSON)'
+              }
+              className="flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg border border-white/15 bg-white/[0.07] text-xs font-medium text-slate-100 hover:bg-white/15 hover:text-white transition-colors whitespace-nowrap"
             >
-              <Download className="w-3.5 h-3.5 shrink-0 text-cyan-300" />
-              <span>Export</span>
+              <Save className="w-3.5 h-3.5 shrink-0 text-cyan-300" />
+              <span>Sauvegarder</span>
             </button>
 
             <button

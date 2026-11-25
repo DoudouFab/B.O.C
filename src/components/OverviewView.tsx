@@ -19,6 +19,7 @@ import {
   Project,
   TodoItem,
 } from '../types';
+import { deriveLightPostItColors } from '../utils/colorUtils';
 
 interface OverviewViewProps {
   controller: ControllerProfile;
@@ -32,7 +33,7 @@ interface OverviewViewProps {
   onChangeProjectColor: (projectId: string, color: string) => Promise<void>;
   onUpsertProject: (
     project: Omit<Project, 'id'> & { id?: string }
-  ) => Promise<void>;
+  ) => Promise<string | null | void>;
   onDeleteProject: (projectId: string) => Promise<void>;
   onImportProjectControlerFile: (files: File | FileList | File[]) => Promise<void>;
 }
@@ -372,22 +373,31 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
             </button>
           </div>
           <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-2.5 flex-1">
-            {notebooks.slice(0, 3).map((n) => (
-              <button
-                key={n.id}
-                type="button"
-                onClick={() => onNavigate('notes')}
-                className="w-full text-left p-3 rounded-xl border border-black/10 hover:shadow-xs transition-all space-y-1"
-                style={{ backgroundColor: n.color || '#FEF9C3' }}
-              >
-                <p className="text-xs font-semibold text-slate-900 truncate">
-                  {n.title}
-                </p>
-                <p className="text-[11px] text-slate-700 line-clamp-1">
-                  {n.content || 'Note vide...'}
-                </p>
-              </button>
-            ))}
+            {notebooks.slice(0, 3).map((n) => {
+              const proj = getProject(n.projectId);
+              const tinted = proj
+                ? deriveLightPostItColors(proj.color)
+                : { bgHex: n.color || '#FEF9C3', borderHex: 'rgba(0,0,0,0.1)' };
+              return (
+                <button
+                  key={n.id}
+                  type="button"
+                  onClick={() => onNavigate('notes')}
+                  className="w-full text-left p-3 rounded-xl border hover:shadow-xs transition-all space-y-1"
+                  style={{
+                    backgroundColor: tinted.bgHex,
+                    borderColor: tinted.borderHex,
+                  }}
+                >
+                  <p className="text-xs font-semibold text-slate-900 truncate">
+                    {n.title}
+                  </p>
+                  <p className="text-[11px] text-slate-700 line-clamp-1">
+                    {n.content || 'Note vide...'}
+                  </p>
+                </button>
+              );
+            })}
             {notebooks.length === 0 && (
               <div className="p-4 text-sm text-slate-500">
                 Aucun post-it créé.

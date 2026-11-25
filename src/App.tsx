@@ -56,6 +56,7 @@ import { AppsConnectorView } from './components/AppsConnectorView';
 import { LiveAppEmbedView } from './components/LiveAppEmbedView';
 import { PWAInstallButton } from './components/PWAInstallButton';
 import { OfflineIndicator } from './components/OfflineIndicator';
+import { useLocalAutoBackup } from './hooks/useLocalAutoBackup';
 
 const LEGACY_BROKEN_PROJECT_CONTROLER_URL =
   'https://doudoufab.github.io/Project-Controler-Fabien.PIRQUIN/';
@@ -108,6 +109,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [controller, setController] = useState<ControllerProfile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [todos, setTodos] = useState<TodoItem[]>([]);
@@ -132,6 +134,64 @@ export default function App() {
     }, 3500);
   };
 
+  const buildBackupJson = () => {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      controller,
+      projects,
+      todos,
+      calendarEntries,
+      notebooks,
+    };
+    return JSON.stringify(payload, null, 2);
+  };
+
+  const getBackupFileName = (useFixedFileName: boolean) => {
+    if (useFixedFileName) {
+      return 'boc_sauvegarde.json';
+    }
+    const datePart = toLocalIso(new Date());
+    const rawSlug = (controller?.displayName || controller?.email || 'controleur')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 32);
+    return `boc_${rawSlug || 'controleur'}_${datePart}.json`;
+  };
+
+  const handleExportBackup = () => {
+    if (!controller) return;
+    const json = buildBackupJson();
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', getBackupFileName(false));
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showNotice('Sauvegarde JSON téléchargée.');
+  };
+
+  const dataSignature = JSON.stringify({
+    controller,
+    projects,
+    todos,
+    calendarEntries,
+    notebooks,
+  });
+
+  const localBackup = useLocalAutoBackup({
+    uid: user?.uid ?? null,
+    isReady: Boolean(authReady && user && controller && !loadingProfile),
+    buildBackupJson,
+    getBackupFileName,
+    dataSignature,
+    onFallbackDownload: handleExportBackup,
+    onNotify: showNotice,
+  });
+
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (nextUser) => {
       setUser(nextUser);
@@ -149,6 +209,7 @@ export default function App() {
       }
 
       setLoadingProfile(true);
+      setProfileError(null);
       const uid = nextUser.uid;
       const controllerRef = doc(db, 'controllers', uid);
 
@@ -246,7 +307,12 @@ export default function App() {
           await batch.commit();
         }
       } catch (error) {
-        handleFirestoreError(error, OperationType.WRITE, `controllers/${uid}`);
+        const message =
+          error instanceof Error ? error.message : String(error);
+        console.error('Erreur chargement profil B.O.C :', message);
+        setProfileError(
+          'Impossible de charger votre espace B.O.C pour le moment. Vérifiez votre connexion puis réessayez.'
+        );
       } finally {
         setLoadingProfile(false);
       }
@@ -294,9 +360,17 @@ export default function App() {
             linksLocked: Boolean(d.linksLocked),
             calendarInviteEmails: inviteEmails,
           });
+          setProfileError(null);
         }
       },
-      (error) => handleFirestoreError(error, OperationType.GET, `controllers/${uid}`)
+      (error) => {
+        const message =
+          error instanceof Error ? error.message : String(error);
+        console.error('Erreur écoute profil B.O.C :', message);
+        setProfileError(
+          'Connexion à votre profil B.O.C interrompue. Veuillez réessayer ou vous reconnecter.'
+        );
+      }
     );
 
     const unsubProjects = onSnapshot(
@@ -475,7 +549,56 @@ export default function App() {
     return () => window.removeEventListener('message', onMessage);
   }, [authReady, user]);
 
-  if (!authReady || (user && (loadingProfile || !controller))) {
+  if (!authReady || (user && loadingProfile && !profileError)) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#071430] via-[#0B1F4D] to-[#08173A] flex flex-col items-center justify-center gap-4 p-6">
+        <div className="w-16 h-16 rounded-2xl overflow-hidden ring-2 ring-cyan-400/45 shadow-xl">
+          <img
+            src="src/assets/images/boc_logo_emblem_flashy.png"
+            alt="Logo B.O.C"
+            referrerPolicy="no-referrer"
+            className="w-full h-full object-cover"
+          />
+        </div>
+        <div className="text-sm font-medium text-sky-100">
+          Chargement de B.O.C...
+        </div>
+      </div>
+    );
+  }
+
+  if (user && !controller) {
+    if (profileError) {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-[#071430] via-[#0B1F4D] to-[#08173A] flex items-center justify-center p-6">
+          <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl p-6 space-y-4 text-center">
+            <h2 className="text-base font-bold text-slate-900">
+              Chargement interrompu
+            </h2>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              {profileError}
+            </p>
+            <div className="flex items-center justify-center gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="px-4 py-2 rounded-xl bg-blue-700 text-xs font-semibold text-white hover:bg-blue-800 transition-colors"
+              >
+                Réessayer
+              </button>
+              <button
+                type="button"
+                onClick={() => void signOut(auth)}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                Se déconnecter
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#071430] via-[#0B1F4D] to-[#08173A] flex flex-col items-center justify-center gap-4 p-6">
         <div className="w-16 h-16 rounded-2xl overflow-hidden ring-2 ring-cyan-400/45 shadow-xl">
@@ -616,7 +739,7 @@ export default function App() {
 
   const handleUpsertProject = async (
     proj: Omit<Project, 'id'> & { id?: string }
-  ) => {
+  ): Promise<string | null> => {
     const id = proj.id || `proj-${Date.now()}`;
     const isExisting = Boolean(proj.id && projects.some((p) => p.id === proj.id));
     const path = `controllers/${uid}/projects/${id}`;
@@ -664,6 +787,7 @@ export default function App() {
         });
         showNotice(`Chantier ${proj.code} ajouté.`);
       }
+      return id;
     } catch (error) {
       handleFirestoreError(
         error,
@@ -694,7 +818,7 @@ export default function App() {
     startTime?: string;
     durationMinutes?: number;
     location?: string;
-  }) => {
+  }): Promise<string> => {
     const id = `cal-${Date.now()}`;
     const path = `controllers/${uid}/calendarEntries/${id}`;
     try {
@@ -716,6 +840,7 @@ export default function App() {
         updatedAt: serverTimestamp(),
       });
       showNotice('Événement ajouté au calendrier.');
+      return id;
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, path);
     }
@@ -1592,31 +1717,6 @@ export default function App() {
     }
   };
 
-  const handleExportBackup = () => {
-    const payload = {
-      exportedAt: new Date().toISOString(),
-      controller,
-      projects,
-      todos,
-      calendarEntries,
-      notebooks,
-    };
-    const json = JSON.stringify(payload, null, 2);
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute(
-      'download',
-      `boc_fabien_pirquin_${new Date().toISOString().slice(0, 10)}.json`
-    );
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    showNotice('Sauvegarde JSON téléchargée.');
-  };
-
   const handleRestoreBackup = async (
     file: File
   ): Promise<{ ok: boolean; message: string }> => {
@@ -2108,7 +2208,12 @@ export default function App() {
         projects={projects}
         selectedProjectId={selectedProjectId}
         onSelectProject={setSelectedProjectId}
-        onExportBackup={handleExportBackup}
+        onExportBackup={() => void localBackup.saveNow()}
+        localBackupFolderName={localBackup.metadata?.folderName ?? null}
+        localBackupNeedsReactivation={Boolean(
+          localBackup.metadata && localBackup.permission === 'prompt'
+        )}
+        onReactivateLocalBackup={() => void localBackup.reactivateFolder()}
         onSignOut={handleSignOut}
         controller={controller}
         mobileOpen={mobileMenuOpen}
@@ -2274,7 +2379,9 @@ export default function App() {
                   onUpdateEntry={handleUpdateCalendarEntry}
                   onDeleteEntry={handleDeleteCalendarEntry}
                   onChangeProjectColor={handleChangeProjectColor}
+                  onCreateManualProject={handleUpsertProject}
                   onImportProjectControlerFile={handleImportProjectControlerFile}
+                  onNotify={showNotice}
                 />
               )}
 
@@ -2296,6 +2403,19 @@ export default function App() {
                   onSaveCalendarInviteEmails={handleSaveCalendarInviteEmails}
                   onExportBackup={handleExportBackup}
                   onRestoreBackup={handleRestoreBackup}
+                  localBackup={{
+                    supported: localBackup.supported,
+                    inEmbeddedFrame: localBackup.inEmbeddedFrame,
+                    metadata: localBackup.metadata,
+                    permission: localBackup.permission,
+                    saving: localBackup.saving,
+                    error: localBackup.error,
+                    onChooseFolder: localBackup.chooseFolder,
+                    onReactivateFolder: localBackup.reactivateFolder,
+                    onSaveNow: localBackup.saveNow,
+                    onRemoveFolder: localBackup.removeFolder,
+                    onUpdateSettings: localBackup.updateSettings,
+                  }}
                 />
               )}
             </>
