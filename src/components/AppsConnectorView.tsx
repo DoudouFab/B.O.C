@@ -29,6 +29,7 @@ interface LocalBackupControlProps {
   supported: boolean;
   inEmbeddedFrame: boolean;
   metadata: LocalBackupMetadata | null;
+  settings: LocalBackupSettings;
   permission: BackupPermissionState;
   saving: boolean;
   error: string | null;
@@ -644,89 +645,90 @@ export const AppsConnectorView: React.FC<AppsConnectorViewProps> = ({
               </div>
             )}
 
-            {localBackup.metadata && (
-              <div className="pt-3 border-t border-slate-200/80 space-y-3">
-                <div className="space-y-1.5">
-                  <div className="text-xs font-semibold text-slate-800">
-                    Enregistrement automatique périodique
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {(
-                      [
-                        {
-                          value: 0,
-                          label: 'Jamais (bouton Sauvegarder uniquement)',
-                        },
-                        { value: 5, label: '5 min' },
-                        { value: 10, label: '10 min' },
-                        { value: 15, label: '15 min' },
-                        { value: 30, label: '30 min' },
-                      ] as const
-                    ).map((opt) => {
-                      const active =
-                        localBackup.metadata!.settings.autoIntervalMinutes ===
-                        opt.value;
-                      return (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          onClick={() => {
-                            const curr = localBackup.metadata!.settings;
-                            void localBackup.onUpdateSettings({
-                              ...curr,
-                              autoIntervalMinutes:
-                                opt.value as AutoBackupIntervalMinutes,
-                            });
-                          }}
-                          className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
-                            active
-                              ? 'bg-blue-700 border-blue-700 text-white shadow-2xs'
-                              : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
-                          }`}
-                        >
-                          {opt.label}
-                        </button>
-                      );
-                    })}
-                  </div>
+            <div className="pt-3 border-t border-slate-200/80 space-y-3">
+              <div className="space-y-1.5">
+                <div className="text-xs font-semibold text-slate-800">
+                  Enregistrement automatique périodique
                 </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div className="flex flex-wrap gap-1.5">
                   {(
                     [
                       {
-                        key: 'autoOnOpen',
-                        label:
-                          'Toujours sauvegarder à l’ouverture (écrase le précédent)',
+                        value: 0,
+                        label: 'Jamais (bouton Sauvegarder uniquement)',
                       },
-                      {
-                        key: 'autoOnHideOrClose',
-                        label: 'Sauvegarder au changement d’onglet / fermeture',
-                      },
+                      { value: 5, label: '5 min' },
+                      { value: 10, label: '10 min' },
+                      { value: 15, label: '15 min' },
+                      { value: 30, label: '30 min' },
                     ] as const
-                  ).map((item) => (
-                    <label
-                      key={item.key}
-                      className="flex items-center gap-2 rounded-lg bg-white border border-slate-200 px-3 py-2 text-xs text-slate-700 cursor-pointer"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={localBackup.metadata!.settings[item.key]}
-                        onChange={(e) => {
-                          const curr = localBackup.metadata!.settings;
+                  ).map((opt) => {
+                    const active =
+                      localBackup.settings.autoIntervalMinutes === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => {
                           void localBackup.onUpdateSettings({
-                            ...curr,
-                            [item.key]: e.target.checked,
+                            ...localBackup.settings,
+                            autoIntervalMinutes:
+                              opt.value as AutoBackupIntervalMinutes,
                           });
                         }}
-                        className="w-3.5 h-3.5 rounded border-slate-300 text-blue-700"
-                      />
-                      <span>{item.label}</span>
-                    </label>
-                  ))}
+                        className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                          active
+                            ? 'bg-blue-700 border-blue-700 text-white shadow-2xs'
+                            : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
-            )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {(
+                  [
+                    {
+                      key: 'autoOnOpen',
+                      label:
+                        'Toujours sauvegarder à l’ouverture (écrase le précédent)',
+                    },
+                    {
+                      key: 'autoOnHideOrClose',
+                      label: 'Sauvegarder au changement d’onglet / fermeture',
+                    },
+                  ] as const
+                ).map((item) => (
+                  <label
+                    key={item.key}
+                    className="flex items-center gap-2 rounded-lg bg-white border border-slate-200 px-3 py-2 text-xs text-slate-700 cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={localBackup.settings[item.key]}
+                      onChange={(e) => {
+                        void localBackup.onUpdateSettings({
+                          ...localBackup.settings,
+                          [item.key]: e.target.checked,
+                        });
+                      }}
+                      className="w-3.5 h-3.5 rounded border-slate-300 text-blue-700"
+                    />
+                    <span>{item.label}</span>
+                  </label>
+                ))}
+              </div>
+
+              {!localBackup.metadata && (
+                <p className="text-[11px] text-slate-500">
+                  Ces préférences seront appliquées dès qu’un dossier local est sélectionné ci-dessus sur cet appareil.
+                </p>
+              )}
+            </div>
 
             {localBackup.error && (
               <div className="p-2.5 rounded-lg bg-red-50 border border-red-200 text-xs text-red-800">

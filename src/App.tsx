@@ -2407,6 +2407,7 @@ export default function App() {
                     supported: localBackup.supported,
                     inEmbeddedFrame: localBackup.inEmbeddedFrame,
                     metadata: localBackup.metadata,
+                    settings: localBackup.settings,
                     permission: localBackup.permission,
                     saving: localBackup.saving,
                     error: localBackup.error,

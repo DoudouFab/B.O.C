@@ -9,6 +9,7 @@ import {
   LocalBackupMetadata,
   LocalBackupSettings,
   pickAndStoreBackupFolder,
+  readLocalBackupSettings,
   requestStoredFolderPermission,
   updateLocalBackupSettings,
   writeBackupToStoredFolder,
@@ -36,6 +37,9 @@ export function useLocalAutoBackup({
   const [supported] = useState(() => isDirectoryPickerSupported());
   const [inEmbeddedFrame] = useState(() => isEmbeddedCrossOriginFrame());
   const [metadata, setMetadata] = useState<LocalBackupMetadata | null>(null);
+  const [settings, setSettings] = useState<LocalBackupSettings>(() => ({
+    ...DEFAULT_LOCAL_BACKUP_SETTINGS,
+  }));
   const [permission, setPermission] = useState<BackupPermissionState>(() =>
     isDirectoryPickerSupported() ? 'prompt' : 'unsupported'
   );
@@ -65,14 +69,20 @@ export function useLocalAutoBackup({
 
     if (!uid) {
       setMetadata(null);
+      setSettings({ ...DEFAULT_LOCAL_BACKUP_SETTINGS });
       setPermission(supported ? 'prompt' : 'unsupported');
       return;
     }
+
+    setSettings(readLocalBackupSettings(uid));
 
     let cancelled = false;
     void getStoredBackupState(uid).then((res) => {
       if (cancelled) return;
       setMetadata(res.metadata);
+      if (res.metadata?.settings) {
+        setSettings(res.metadata.settings);
+      }
       setPermission(res.permission);
     });
 
@@ -224,11 +234,9 @@ export function useLocalAutoBackup({
     if (!uid) return;
     setError(null);
     try {
-      const res = await pickAndStoreBackupFolder(
-        uid,
-        metadata?.settings ?? DEFAULT_LOCAL_BACKUP_SETTINGS
-      );
+      const res = await pickAndStoreBackupFolder(uid, settings);
       setMetadata(res.metadata);
+      setSettings(res.metadata.settings);
       setPermission(res.permission);
       if (res.permission === 'granted') {
         openingBackupDoneForUidRef.current = uid;
@@ -245,7 +253,7 @@ export function useLocalAutoBackup({
           : 'Impossible de sélectionner le dossier local.'
       );
     }
-  }, [uid, metadata?.settings, runFolderWrite]);
+  }, [uid, settings, runFolderWrite]);
 
   const reactivateFolder = useCallback(async () => {
     if (!uid) return;
@@ -293,10 +301,12 @@ export function useLocalAutoBackup({
 
   const updateSettings = useCallback(
     async (next: LocalBackupSettings) => {
+      setSettings(next);
       if (!uid) return;
       const updated = await updateLocalBackupSettings(uid, next);
-      if (updated) {
-        setMetadata(updated);
+      setSettings(updated.settings);
+      if (updated.metadata) {
+        setMetadata(updated.metadata);
       }
     },
     [uid]
@@ -306,6 +316,7 @@ export function useLocalAutoBackup({
     supported,
     inEmbeddedFrame,
     metadata,
+    settings,
     permission,
     saving,
     error,

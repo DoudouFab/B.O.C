@@ -70,6 +70,30 @@ const DB_NAME = 'boc_local_backup_v1';
 const STORE_NAME = 'folder_handles';
 
 const recordKeyForUid = (uid: string) => `backup-folder-${uid}`;
+const prefsStorageKeyForUid = (uid: string) => `boc_local_backup_prefs_${uid}`;
+
+export function readLocalBackupSettings(uid: string): LocalBackupSettings {
+  try {
+    if (typeof localStorage === 'undefined') {
+      return { ...DEFAULT_LOCAL_BACKUP_SETTINGS };
+    }
+    const raw = localStorage.getItem(prefsStorageKeyForUid(uid));
+    if (!raw) return { ...DEFAULT_LOCAL_BACKUP_SETTINGS };
+    return normalizeSettings(JSON.parse(raw));
+  } catch {
+    return { ...DEFAULT_LOCAL_BACKUP_SETTINGS };
+  }
+}
+
+function writeLocalBackupPrefs(uid: string, settings: LocalBackupSettings): void {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(prefsStorageKeyForUid(uid), JSON.stringify(settings));
+    }
+  } catch {
+    // ignore storage quota / privacy mode errors
+  }
+}
 
 function openBackupDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -249,7 +273,8 @@ export async function pickAndStoreBackupFolder(
     ? normalizeSettings(settings)
     : existing?.settings
     ? normalizeSettings(existing.settings)
-    : { ...DEFAULT_LOCAL_BACKUP_SETTINGS };
+    : readLocalBackupSettings(uid);
+  writeLocalBackupPrefs(uid, resolvedSettings);
 
   const nextRecord: StoredFolderRecord = {
     handle,
@@ -274,19 +299,30 @@ export async function pickAndStoreBackupFolder(
 export async function updateLocalBackupSettings(
   uid: string,
   settings: LocalBackupSettings
-): Promise<LocalBackupMetadata | null> {
+): Promise<{
+  settings: LocalBackupSettings;
+  metadata: LocalBackupMetadata | null;
+}> {
+  const normalized = normalizeSettings(settings);
+  writeLocalBackupPrefs(uid, normalized);
+
   const existing = await readRecord(uid);
-  if (!existing) return null;
+  if (!existing) {
+    return { settings: normalized, metadata: null };
+  }
   const updated: StoredFolderRecord = {
     ...existing,
-    settings: normalizeSettings(settings),
+    settings: normalized,
   };
   await writeRecord(uid, updated);
   return {
-    folderName: updated.folderName,
-    lastSavedAt: updated.lastSavedAt,
-    lastSavedFile: updated.lastSavedFile,
-    settings: updated.settings,
+    settings: normalized,
+    metadata: {
+      folderName: updated.folderName,
+      lastSavedAt: updated.lastSavedAt,
+      lastSavedFile: updated.lastSavedFile,
+      settings: updated.settings,
+    },
   };
 }
 
