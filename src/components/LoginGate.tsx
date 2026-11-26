@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ArrowRight } from 'lucide-react';
 import { signInWithPopup } from 'firebase/auth';
-import { auth, googleProvider } from '../firebase';
+import { auth, formatFirebaseAuthError, googleProvider } from '../firebase';
 import { PWAInstallButton } from './PWAInstallButton';
 
 export const LoginGate: React.FC = () => {
@@ -14,11 +14,7 @@ export const LoginGate: React.FC = () => {
     try {
       await signInWithPopup(auth, googleProvider);
     } catch (err) {
-      const msg =
-        err instanceof Error
-          ? err.message
-          : 'Impossible de finaliser la connexion.';
-      setError(msg);
+      setError(formatFirebaseAuthError(err));
       setLoading(false);
     }
   };

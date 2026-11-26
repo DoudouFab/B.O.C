@@ -57,6 +57,38 @@ export function clearCachedCalendarAccessToken(): void {
   cachedCalendarAccessToken = null;
 }
 
+export function formatFirebaseAuthError(err: unknown): string {
+  const code =
+    err && typeof err === 'object' && 'code' in err
+      ? String((err as { code?: string }).code)
+      : '';
+  const msg = err instanceof Error ? err.message : '';
+
+  if (
+    code === 'auth/unauthorized-domain' ||
+    msg.includes('auth/unauthorized-domain')
+  ) {
+    const host =
+      typeof window !== 'undefined' && window.location.hostname
+        ? window.location.hostname
+        : 'domaine inconnu';
+    return `Domaine non autorisé pour la connexion Google (« ${host} »). Si vous avez installé l’appli depuis une ancienne adresse ou un autre hébergeur (ex. GitHub Pages), désinstallez l’icône puis réinstallez-la depuis le lien partagé B.O.C, ou ajoutez « ${host} » dans Firebase Console → Authentication → Paramètres → Domaines autorisés.`;
+  }
+
+  if (
+    code === 'auth/popup-closed-by-user' ||
+    code === 'auth/cancelled-popup-request'
+  ) {
+    return 'Connexion annulée avant validation.';
+  }
+
+  if (code === 'auth/popup-blocked') {
+    return 'La fenêtre de connexion Google a été bloquée par le navigateur. Autorisez les pop-ups pour ce site puis réessayez.';
+  }
+
+  return msg || 'Impossible de finaliser la connexion.';
+}
+
 export async function requestCalendarAccessToken(): Promise<string> {
   const calendarProvider = new GoogleAuthProvider();
   calendarProvider.addScope(CALENDAR_EVENTS_SCOPE);
@@ -100,6 +132,9 @@ export async function requestCalendarAccessToken(): Promise<string> {
       throw new Error(
         'La fenêtre d’accord Google a été bloquée par le navigateur. Autorisez les pop-ups pour ce site puis réessayez.'
       );
+    }
+    if (code === 'auth/unauthorized-domain') {
+      throw new Error(formatFirebaseAuthError(err));
     }
     throw err;
   }
