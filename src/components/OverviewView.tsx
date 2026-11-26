@@ -1,7 +1,5 @@
 import React, { useRef, useState } from 'react';
 import {
-  ArrowRight,
-  ExternalLink,
   Plus,
   Upload,
   Calendar,
@@ -178,64 +176,39 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
   const quickApps: {
     id: 'jtd' | 'inasep' | 'sitesnap';
     title: string;
-    subtitle: string;
-    url: string;
     iconSrc: string;
-    cardBgClass: string;
-    topBarClass: string;
-    btnClass: string;
+    btnBgClass: string;
   }[] = [
     {
       id: 'jtd',
       title: 'JDT',
-      subtitle: 'Workflow & tâches terrain',
-      url: controller.jtdUrl,
       iconSrc: 'app-icons/jdt-icon.svg',
-      cardBgClass:
-        'bg-gradient-to-br from-blue-50/90 via-white to-white border-blue-200/90 hover:border-blue-300',
-      topBarClass: 'from-blue-600 to-indigo-500',
-      btnClass:
-        'bg-gradient-to-r from-blue-700 to-blue-600 hover:from-blue-800 hover:to-blue-700 shadow-xs shadow-blue-700/20',
+      btnBgClass: 'bg-[#085499] border-blue-300/60 hover:border-blue-500',
     },
     {
       id: 'inasep',
       title: 'Project-Controler',
-      subtitle: 'Chantiers, EA, intempéries & JC',
-      url: controller.inasepUrl,
       iconSrc: 'app-icons/project-controler-icon.png',
-      cardBgClass:
-        'bg-gradient-to-br from-sky-50/95 via-white to-white border-sky-200/90 hover:border-sky-300',
-      topBarClass: 'from-sky-500 to-cyan-500',
-      btnClass:
-        'bg-gradient-to-r from-sky-700 to-cyan-600 hover:from-sky-800 hover:to-cyan-700 shadow-xs shadow-sky-700/20',
+      btnBgClass: 'bg-[#eef3f8] border-sky-200/90 hover:border-sky-400',
     },
     {
       id: 'sitesnap',
       title: 'Appli-Photo',
-      subtitle: 'Photos chantier & dossiers OneDrive',
-      url: controller.sitesnapUrl,
       iconSrc: 'app-icons/appli-photo-icon.png',
-      cardBgClass:
-        'bg-gradient-to-br from-amber-50/90 via-white to-white border-amber-200/90 hover:border-amber-300',
-      topBarClass: 'from-amber-500 to-orange-500',
-      btnClass:
-        'bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 shadow-xs shadow-amber-600/20',
+      btnBgClass: 'bg-[#141d2e] border-slate-700/80 hover:border-amber-400',
     },
   ];
 
   const getProject = (id: string) => projects.find((p) => p.id === id);
 
   return (
-    <div className="space-y-6 sm:space-y-8">
-      <section className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2">
-          <div>
-            <p className="text-xs font-medium text-slate-500">
+    <div className="space-y-5 sm:space-y-6">
+      <section className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] sm:text-xs font-medium text-slate-500 truncate">
               Boîte à Outils du Contrôleur · {controller.displayName}
             </p>
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight mt-0.5 text-balance">
-              Vos 3 applications en accès direct
-            </h1>
           </div>
           <button
             type="button"
@@ -247,52 +220,23 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-3 gap-3 sm:gap-4 max-w-md sm:max-w-[420px]">
           {quickApps.map((app) => (
-            <div
+            <button
               key={app.id}
-              className={`border rounded-2xl overflow-hidden shadow-xs hover:shadow-md hover:-translate-y-0.5 transition-all flex flex-col justify-between ${app.cardBgClass}`}
+              type="button"
+              onClick={() => onOpenLiveApp(app.id)}
+              title={`Ouvrir ${app.title} dans B.O.C`}
+              aria-label={`Ouvrir ${app.title} dans B.O.C`}
+              className={`group relative aspect-square w-full rounded-[22%] border overflow-hidden shadow-sm hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 ${app.btnBgClass}`}
             >
-              <div className={`h-1.5 w-full bg-gradient-to-r ${app.topBarClass}`} />
-              <div className="p-5 flex flex-col justify-between gap-5 flex-1">
-                <div className="flex items-center gap-4">
-                  <div className="w-14 h-14 rounded-xl overflow-hidden border border-slate-200/80 bg-white shrink-0 shadow-xs p-1">
-                    <img
-                      src={app.iconSrc}
-                      alt={`Icône ${app.title}`}
-                      referrerPolicy="no-referrer"
-                      className="w-full h-full object-contain"
-                    />
-                  </div>
-                  <div className="min-w-0 space-y-1">
-                    <h2 className="text-base font-bold text-slate-900 leading-snug">
-                      {app.title}
-                    </h2>
-                    <p className="text-xs text-slate-600">{app.subtitle}</p>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-slate-200/70">
-                  <button
-                    type="button"
-                    onClick={() => onOpenLiveApp(app.id)}
-                    className={`flex-1 inline-flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-white transition-all whitespace-nowrap ${app.btnClass}`}
-                  >
-                    <span>Ouvrir dans B.O.C</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                  <a
-                    href={app.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors whitespace-nowrap"
-                  >
-                    <span>Nouvel onglet</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
-                </div>
-              </div>
-            </div>
+              <img
+                src={app.iconSrc}
+                alt={app.title}
+                referrerPolicy="no-referrer"
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+              />
+            </button>
           ))}
         </div>
       </section>

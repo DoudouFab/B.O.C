@@ -82,9 +82,11 @@ export const LiveAppEmbedView: React.FC<LiveAppEmbedViewProps> = ({
           href={url}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-blue-700 to-sky-600 text-xs font-semibold text-white hover:from-blue-800 hover:to-sky-700 shadow-xs transition-all whitespace-nowrap shrink-0"
+          title="Ouvrir en page indépendante"
+          aria-label="Ouvrir en page indépendante"
+          className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-gradient-to-r from-blue-700 to-sky-600 text-xs font-semibold text-white hover:from-blue-800 hover:to-sky-700 shadow-xs transition-all whitespace-nowrap shrink-0"
         >
-          <span className="hidden sm:inline">Fenêtre seule</span>
+          <span className="hidden sm:inline">Page indépendante</span>
           <ExternalLink className="w-3.5 h-3.5" />
         </a>
       </div>
